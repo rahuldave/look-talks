@@ -1,0 +1,5 @@
+_site/
+.quarto/
+__pycache__/
+books/
+.DS_Store
