@@ -18,6 +18,24 @@ MAGIC = (b"PK\x03\x04", b"\x1f\x8b", b"7z\xbc\xaf", b"Rar!")
 LARGEST_FILE = 1024 * 1024
 SYMLINK_MODE = "120000"
 SUBMODULE_MODE = "160000"
+# Files that may be larger than LARGEST_FILE, each named by the SHA of its exact content. A changed file has a new
+# SHA, so it fails until a person reviews it and lists it again. The name and the first bytes are still checked.
+# The list is read from the index, so that a commit carries the list that let its files through.
+LARGE_FILES_LIST = "scripts/large-files.txt"
+
+
+def large_files_allowed():
+    """Return the set of blob SHAs in the staged large-files.txt. A line is a SHA, a space and the path, or a #
+    comment. A list that is not staged allows nothing."""
+    result = subprocess.run(["git", "show", f":{LARGE_FILES_LIST}"], capture_output=True)
+    if result.returncode != 0:
+        return set()
+    allowed = set()
+    for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            allowed.add(line.split()[0])
+    return allowed
 
 
 def git(*args, stdin=None):
@@ -39,9 +57,9 @@ def bad_name(path):
     return None
 
 
-def bad_content(size, head):
+def bad_content(size, head, sha="", allowed=frozenset()):
     """Return the reason that a file's size or first bytes look like a book, or None."""
-    if size > LARGEST_FILE:
+    if size > LARGEST_FILE and sha not in allowed:
         return f"it is larger than {LARGEST_FILE} bytes"
     if b"%PDF-" in head[:1024]:
         return "its content is a PDF"
@@ -75,6 +93,7 @@ def problems_in_index():
             mode, sha, _stage = info.decode().split()
             entries.append((mode, sha, raw_path.decode(errors="replace")))
     blobs = read_blobs(sha for mode, sha, _ in entries if mode not in (SUBMODULE_MODE,))
+    allowed = large_files_allowed()
     found = []
     for mode, sha, path in entries:
         reason = bad_name(path)
@@ -83,7 +102,7 @@ def problems_in_index():
         if reason is None and mode == SUBMODULE_MODE:
             reason = "it is a submodule, which this check cannot read"
         if reason is None:
-            reason = bad_content(*blobs[sha])
+            reason = bad_content(*blobs[sha], sha, allowed)
         if reason:
             found.append(f"{path}: {reason}")
     return found
@@ -101,9 +120,10 @@ def problems_in_history():
                 stdin=("\n".join(paths) + "\n").encode()).decode().split("\n")
     blob_shas = [line.split()[0] for line in kinds if line.endswith(" blob")]
     blobs = read_blobs(blob_shas)
+    allowed = large_files_allowed()
     found = set()
     for sha in blob_shas:
-        reason = bad_name(paths[sha]) or bad_content(*blobs[sha])
+        reason = bad_name(paths[sha]) or bad_content(*blobs[sha], sha, allowed)
         if reason:
             found.add(f"{paths[sha] or sha}: {reason}, in the history")
     return sorted(found)

@@ -34,6 +34,48 @@ class BooksCheck(unittest.TestCase):
         return subprocess.run([sys.executable, "-I", str(SCRIPT), *args], cwd=cwd or self.root,
                               capture_output=True).returncode
 
+    def large_file_setup(self, listed_content, staged_content, stage_list=True, commit=False):
+        """Stage a large-files list and one large file, then run the check with --history.
+
+        With commit=True, the files are committed and the index is emptied of them, so that only the history
+        path of the check can see them."""
+        sha = subprocess.run(["git", "hash-object", "--stdin"], input=listed_content, capture_output=True,
+                             check=True).stdout.decode().strip()
+        (self.root / "scripts").mkdir()
+        (self.root / "scripts" / "large-files.txt").write_text(f"# reviewed\n{sha} theme.scss\n")
+        if stage_list:
+            self.git("add", "-f", "scripts/large-files.txt")
+        self.add("theme.scss", staged_content)
+        if commit:
+            self.git("commit", "-q", "-m", "x")
+            self.git("rm", "-q", "--cached", "theme.scss")
+        return self.run_check("--history")
+
+    def test_a_listed_large_file_passes(self):
+        content = b"/* theme */\n" + b"a" * (1024 * 1024 + 10)
+        self.assertEqual(self.large_file_setup(content, content), 0)
+
+    def test_a_changed_large_file_fails(self):
+        content = b"/* theme */\n" + b"a" * (1024 * 1024 + 10)
+        self.assertEqual(self.large_file_setup(content, content + b"b"), 1)
+
+    def test_a_listed_large_pdf_still_fails(self):
+        content = b"%PDF-1.7\n" + b"a" * (1024 * 1024 + 10)
+        self.assertEqual(self.large_file_setup(content, content), 1)
+
+    def test_a_list_that_is_not_staged_allows_nothing(self):
+        content = b"/* theme */\n" + b"a" * (1024 * 1024 + 10)
+        self.assertEqual(self.large_file_setup(content, content, stage_list=False), 1)
+
+    def test_the_history_path_uses_the_list(self):
+        content = b"/* theme */\n" + b"a" * (1024 * 1024 + 10)
+        self.assertEqual(self.large_file_setup(content, content, commit=True), 0)
+
+    def test_the_history_path_fails_an_unlisted_large_file(self):
+        listed = b"/* other */\n" + b"a" * (1024 * 1024 + 10)
+        content = b"/* theme */\n" + b"a" * (1024 * 1024 + 10)
+        self.assertEqual(self.large_file_setup(listed, content, commit=True), 1)
+
     def test_clean_repository_passes(self):
         self.add("README.md")
         self.assertEqual(self.run_check(), 0)

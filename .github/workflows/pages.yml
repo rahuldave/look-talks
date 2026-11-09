@@ -1,0 +1,42 @@
+# Build the site with smalldocs and publish it to GitHub Pages, on every push to main that touches it.
+name: site
+
+on:
+  push:
+    branches: [main]
+    paths: ["_smalldocs.yml", "index.qmd", "README.md", "LOOK.md", "docs/**", "_extensions/**",
+            ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build the site with smalldocs 0.5.5
+        run: uvx --from smalldocs==0.5.5 smalldocs render . --strict
+      - name: Fail if the site holds a PDF or an archive, because the books stay out of the site
+        run: test -z "$(find _site -iname '*.pdf' -o -iname '*.epub' -o -iname '*.zip')"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

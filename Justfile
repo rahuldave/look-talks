@@ -5,6 +5,7 @@ set positional-arguments
 
 # Python comes from uv, so the machine needs just and uv only
 python := "uv run --no-project --quiet python"
+smalldocs := "uvx --from smalldocs==0.5.5 smalldocs"
 
 # The checker for prose, check.py of nossaifd, at a fixed commit of its main branch. Move it when
 # check.py changes there.
@@ -13,6 +14,56 @@ nossaifd_commit := "ec80717f074c68dfa5fecb0c8c19ba49398a2f76"
 [private]
 default:
     @just --list --unsorted
+
+# Copy the guide, the example deck and the checker into the skill, which ships copies of them
+sync:
+    mkdir -p .agents/skills/look-talks/references .agents/skills/look-talks/scripts
+    cp LOOK.md .agents/skills/look-talks/references/LOOK.md
+    cp examples/cache/slides.qmd .agents/skills/look-talks/references/example-slides.qmd
+    cp check_look.py .agents/skills/look-talks/scripts/check_look.py
+
+# Check the Python and the JSON for syntax
+lint:
+    {{python}} -I -m py_compile check_look.py scripts/books_check.py tests/*.py
+    {{python}} -I -m json.tool skill-package.json > /dev/null
+
+# Check the example deck with the look checker
+look:
+    {{python}} -I check_look.py -v examples/cache/slides.qmd
+
+# Lint, render and verify the example deck with an htmpres clone at a commit, origin/main unless you name one,
+# in a temporary folder: just example ../htmpres, or just example ../htmpres HEAD
+example htmpres ref="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    htmpres="$(cd "$1" && pwd)"
+    work="$(mktemp -d)"
+    trap 'rm -rf -- "$work"' EXIT
+    cp -R examples/cache/. "$work/"
+    mkdir -p "$work/_extensions"
+    git -C "$htmpres" archive "$2" _extensions/htmpres | tar -x -C "$work"
+    cd "$work"
+    quarto run _extensions/htmpres/htmpres.ts lint slides.qmd --json
+    quarto run _extensions/htmpres/htmpres.ts render slides.qmd
+    quarto run _extensions/htmpres/htmpres.ts verify slides.qmd
+
+# Build the site into _site with smalldocs
+site:
+    {{smalldocs}} render .
+
+# Check the site with smalldocs: the options, the links and the Markdown
+site-check:
+    {{smalldocs}} check .
+
+# Check skill-package.json with skill-package-maker at a fixed commit
+package-lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tool_root="$(mktemp -d)"
+    trap 'rm -rf -- "$tool_root"' EXIT
+    git clone --quiet https://github.com/rahuldave/agent_skill_package_maker.git "$tool_root/package-maker"
+    git -C "$tool_root/package-maker" checkout --quiet 6a5938c49ca71c374dc1a234a4d15134c484a741
+    {{python}} "$tool_root/package-maker/skills/skill-package-maker/scripts/lint_skill_bundle.py" .
 
 # Check the Markdown pages with check.py of nossaifd
 prose:
@@ -48,5 +99,8 @@ hooks:
 # Everything a commit must pass
 check:
     just books-check --history
+    just lint
     just test
+    just look
     just prose
+    just site-check

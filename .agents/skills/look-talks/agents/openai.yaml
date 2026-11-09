@@ -1,0 +1,3 @@
+interface:
+  display_name: "look-talks"
+  short_description: "Choose the theme, the kind of each slide, the marks and the pictures of an htmpres talk, and check that the slides set no color, font or size"
