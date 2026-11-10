@@ -1,0 +1,29 @@
+{
+  "schema": "https://rahuldave.github.io/agent_skill_package_maker/schema/skill-package.v1.json",
+  "version": 1,
+  "repository": {
+    "owner": "rahuldave",
+    "name": "look-talks",
+    "url": "https://github.com/rahuldave/look-talks"
+  },
+  "skills": [
+    {
+      "name": "look-talks",
+      "path": ".agents/skills/look-talks"
+    }
+  ],
+  "executables": {
+    "required": [
+      {
+        "name": "uv",
+        "check": "uv --version",
+        "description": "Runs the look checker with Python 3.11 or later: uv run --no-project python check_look.py slides.qmd."
+      }
+    ],
+    "optional": []
+  },
+  "npx": {
+    "supported": true,
+    "install": "npx skills add rahuldave/look-talks -a codex --skill look-talks -y"
+  }
+}

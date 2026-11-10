@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" role="img" aria-label="Searches go to a copy in memory, and only the misses reach the database">
+<rect width="900" height="600" fill="#f4f1ea"/>
+<g fill="#5b6b78"><circle cx="110" cy="170" r="26"/><circle cx="110" cy="300" r="26"/><circle cx="110" cy="430" r="26"/></g>
+<rect x="330" y="200" width="220" height="200" rx="16" fill="#3d7a74"/>
+<rect x="690" y="240" width="140" height="120" rx="12" fill="#b9864a"/>
+<g stroke="#5b6b78" stroke-width="10" stroke-linecap="round"><line x1="150" y1="170" x2="320" y2="260"/><line x1="150" y1="300" x2="320" y2="300"/><line x1="150" y1="430" x2="320" y2="340"/></g>
+<line x1="560" y1="300" x2="680" y2="300" stroke="#b9864a" stroke-width="6" stroke-dasharray="14 12"/>
+</svg>

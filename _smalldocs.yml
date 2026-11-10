@@ -1,0 +1,35 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - index.qmd
+    - LOOK.md
+    - docs/check-look.md
+    - docs/why.md
+
+website:
+  title: look-talks
+  description: A guide, a checker, an agent skill and an example deck for the look of the slides of a talk
+  site-url: https://rahuldave.com/look-talks/
+  repo-url: https://github.com/rahuldave/look-talks
+  navbar:
+    left:
+      - text: Talks
+        href: https://rahuldave.com/nossaifd-talks/
+    tools:
+      - icon: github
+        href: https://github.com/rahuldave/look-talks
+  sidebar:
+    contents:
+      - text: Overview
+        href: index.qmd
+      - section: The look of slides
+        contents:
+          - LOOK.md
+          - docs/check-look.md
+      - section: About
+        contents:
+          - docs/why.md
+
+theme: folio
+toc: true

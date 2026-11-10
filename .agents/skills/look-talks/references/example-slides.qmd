@@ -1,0 +1,202 @@
+---
+pagetitle: "A cache for the course search"
+deck:
+  theme: atelier
+  color-mode: light
+  counter: presenter
+---
+
+## A cache for the course search {.hero-title}
+
+Priya Rao, platform team
+
+::: notes
+Cue: thanks, then the wait at nine
+Thank you to the platform team for the time today.
+Every morning at nine, three thousand students open the course search, and the page slows to a crawl.
+We cut that wait to under a second, and the fix came from one fact about how students search.
+:::
+
+## Sam and Lee built the cache with me
+
+Sam Okafor and Lee Chen, platform team
+
+::: notes
+Cue: credit the team
+Sam and Lee built this with me, and the registration office gave us four weeks of data.
+:::
+
+## Students wait at nine {.section-divider data-section="Students wait eight seconds at nine"}
+
+::: notes
+Cue: the first section
+First, the wait.
+:::
+
+## Students wait eight seconds at nine {data-section="Students wait eight seconds at nine"}
+
+::: {.incremental data-fragment-effect="dim"}
+- 3,000 searches in ten minutes
+- 8 seconds for each page
+- 1 in 5 students gives up
+:::
+
+::: notes
+Cue: the size of the wait
+Students wait eight seconds for each search page when registration opens.
+That's at nine every morning, when three thousand students search in ten minutes.
+One student in five gives up and tries again later.
+:::
+
+## {#clock data-title="Nine in the morning" data-section="Students wait eight seconds at nine"}
+
+::: {.ds-full .ds-media .ds-no-pad}
+![](assets/clock.svg){.ds-fill}
+:::
+
+[Drawing: look-talks example, [record](#sources).]{.credit}
+
+::: notes
+Cue: the picture alone, a clock at nine; let it sit
+The picture is a clock at nine in the morning.
+That's when registration opens.
+:::
+
+## Every student waits for one database {#queue data-section="Students wait eight seconds at nine"}
+
+::: {.ds-media}
+![A long line of students waits before one database](assets/queue.svg){.ds-fit}
+:::
+
+[Drawing: look-talks example, [record](#sources).]{.credit}
+
+::: notes
+Cue: the same rows
+Every student in this line waits for the same database.
+And the database reads the same course rows for each of them.
+:::
+
+## A student's ticket {.quote data-section="Students wait eight seconds at nine"}
+
+> I tried four times, and [the course was full when the page loaded.]{.key}
+>
+> [Help ticket, example copy written for this deck]{.source}
+
+::: notes
+Cue: let them read; then the full course
+Let the audience read the ticket first.
+Then say it: the wait cost this student a seat.
+:::
+
+## A copy for one minute {.section-divider data-section="A copy for one minute"}
+
+::: notes
+Cue: the second section
+Now the fix.
+:::
+
+## Cached pages skip the database {data-section="A copy for one minute"}
+
+::: {.ds-left .ds-media}
+![Searches go to a copy in memory, and only the misses reach the database](assets/cache.svg){.ds-fit}
+:::
+
+::: {.ds-right .ds-pane .incremental data-fragment-effect="dim"}
+- Keep each page for one minute
+- Serve the copy to the next student
+- Clear the copy when a course changes
+:::
+
+::: notes
+Cue: one minute; no new server
+We keep each result page in memory for one minute.
+The next student who asks for the same page gets the copy, with no database read.
+When a teacher changes a course, we clear the copies for that course at once.
+:::
+
+## Hit rate sets the load {data-section="A copy for one minute" data-step-summary="match"}
+
+::::: {.two-col}
+:::: {.equation-steps data-equation-steps="hit-rate|searches" data-step-indices="1|2"}
+$$ \text{reads} = (1 - \htmlClass{hit-rate}{h}) \times \htmlClass{searches}{\text{searches}} $$
+::::
+:::: {.incremental data-fragment-effect="dim"}
+[h is the share of searches that find a copy]{.fragment data-fragment-index="1" data-match="hit-rate"}
+
+[Each search that misses reads the database]{.fragment data-fragment-index="2" data-match="searches"}
+::::
+:::::
+
+::: notes
+Cue: define the hit rate; then the searches; the colors together
+The number of database reads is the share of searches that miss the cache, times the number of searches.
+We call the share that finds a copy the hit rate.
+At a hit rate of nine in ten, the database does one tenth of the work.
+:::
+
+## {data-title="Pause"}
+
+::: notes
+Cue: blank screen; ask the room
+Here's a pause, so that the room looks back at me.
+How long would you wait for a search page?
+:::
+
+## The wait fell {.section-divider data-section="The wait fell to under a second"}
+
+::: notes
+Cue: the third section
+And here's what changed.
+:::
+
+## {#result data-title="Under a second" data-section="The wait fell to under a second"}
+
+::: {.statement}
+Search at nine takes under a second.
+:::
+
+[The load on the database](#appendix-load)
+
+::: notes
+Cue: eight seconds to one; tickets halved
+Search time at nine fell from eight seconds to under one second.
+Help tickets about the search fell by half in the first week.
+:::
+
+## {data-title="The headline"}
+
+::: {.statement}
+Most students ask for the same twenty courses.
+:::
+
+Questions?
+
+::: notes
+Cue: the reason, thanks, questions
+Most students ask for the same twenty courses, so a one-minute copy answers them all.
+Thank you for listening.
+What questions do you have?
+:::
+
+## Sources of the pictures {#sources data-kind="appendix"}
+
+- The clock, the line of students and the copy in memory: drawings made for this example deck, under the MIT
+  licence of look-talks.
+
+[Back to the picture](#clock)
+
+::: notes
+Cue: only if asked
+:::
+
+## Load on the database at peak {#appendix-load}
+
+- Before: 100 percent of capacity
+- After: 33 percent of capacity
+
+[Back to the result](#result)
+
+::: notes
+Cue: only if asked about the load
+The database now runs at a third of its old load at peak.
+:::

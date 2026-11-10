@@ -1,0 +1,6 @@
+---
+# The title is "look-talks", the first heading of README.md. A title here would show that heading twice.
+description: A guide, a checker, an agent skill and an example deck for the look of the slides of a talk.
+---
+
+{{< include README.md >}}
