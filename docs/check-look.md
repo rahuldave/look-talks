@@ -20,7 +20,8 @@ makes one slide. The checker leaves out the comments.
 A code block that shows code is content, and so are
 indented code, inline code and math, so the checker does not read a color or capitals in them. Raw HTML reaches
 the slide, so the checker reads it for values. Raw HTML is a `{=html}` block, or a `<pre>`, `<script>`, `<style>`
-or `<textarea>` block. The checker also reads the attributes of each code fence, and the notes.
+or `<textarea>` block. The checker also reads the attributes of each code fence. It reads the notes in the
+same way, so code, comments and math in the notes are content too.
 
 The scanner is a copy of the scanner of `check_talk.py` in nossaifd-talks, which follows the scanner of htmpres.
 Both checkers split a deck the same way.

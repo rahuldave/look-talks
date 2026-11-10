@@ -124,6 +124,51 @@ class ValuesTest(unittest.TestCase):
         hard, _ = run("## A\n\nText.\n\n::: notes\nCue: x\n<span style=\"color:red\">y</span>\n:::\n")
         self.assertTrue(notes_with(hard, "style="))
 
+    def test_code_comments_and_math_in_the_notes_pass(self):
+        "Code in the notes shows code, as in the body, so a value in it is content."
+        for notes in ['```html\n<span style="color:red">y</span>\n```\n',
+                      'Say this.\n\n    <span style="color:red">y</span>\n',
+                      '<!-- <font face="Arial">y</font> -->\n',
+                      'Write `style="color:red"` nowhere.\n',
+                      '~~~~\n:::\n<style> .key { color: red; } </style>\n~~~~\n']:
+            with self.subTest(notes=notes):
+                self.assertEqual(run(f"## A\n\nText.\n\n::: notes\n{notes}:::\n")[0], [])
+
+    def test_raw_html_and_fence_attributes_in_the_notes_are_hard(self):
+        for notes, problem in [('```{=html}\n<span style="color:red">y</span>\n```\n', "style="),
+                               ('<style>\n.key { color: red; }\n</style>\n', "<style>"),
+                               ('```{.python style="color:red"}\nx = 1\n```\n', "style=")]:
+            with self.subTest(notes=notes):
+                self.assertTrue(notes_with(run(f"## A\n\nText.\n\n::: notes\n{notes}:::\n")[0], problem))
+
+    def test_a_fence_in_the_notes_does_not_end_them(self):
+        body = '## A\n\nText.\n\n::: notes\n```\n:::\n```\nSay <span style="color:red">y</span>.\n:::\n'
+        self.assertTrue(notes_with(run(body)[0], "style="))
+
+    def test_a_fence_line_inside_pre_does_not_keep_the_notes_open(self):
+        # Review finding: a ``` line inside <pre> left a fence open, and the notes ate the rest of the deck.
+        body = ('## A\n\nText.\n\n::: notes\n<pre>\n```\n</pre>\n:::\n\n'
+                '## B\n\n<span style="color:red">x</span>\n')
+        self.assertTrue(notes_with(run(body)[0], "style="))
+        self.assertFalse(notes_with(run(body)[1], "no .statement"))
+        body = '## A\n\n<pre>\n```\n</pre>\n\n::: notes\nSay it.\n:::\n\n## B\n\n<span style="color:red">x</span>\n'
+        self.assertTrue(notes_with(run(body)[0], "style="))
+
+    def test_a_value_inside_pre_after_a_fence_line_is_hard(self):
+        self.assertTrue(notes_with(run('## A\n\n<pre>\n```\n<span style="color:red">x</span>\n</pre>\n')[0], "style="))
+
+    def test_a_marker_inside_a_comment_does_not_end_the_notes(self):
+        # Review finding: a ::: on a comment line ended the notes early, and their text was read as the slide.
+        body = "## A\n\nText.\n\n::: notes\n<!--\n:::\n-->\nSay WORDS IN ALL CAPS here.\n:::\n"
+        hard, soft = run(body)
+        self.assertEqual(hard, [])
+        self.assertFalse(notes_with(soft, "capitals"))
+
+    def test_a_comment_marker_in_inline_code_hides_nothing(self):
+        # Review finding: `<!--` in inline code cut the rest of the line, in the notes and in the body.
+        self.assertTrue(notes_with(run("## A\n\nText.\n\n::: notes\nSay `<!--` and <font>x</font>.\n:::\n")[0], "<font>"))
+        self.assertTrue(notes_with(run("## A\n\nWrite `<!--` and <font>x</font>.\n")[0], "<font>"))
+
     def test_ids_links_and_headings_that_look_like_colors_pass(self):
         body = ("## A {#cafe}\n\n[back](#bad)\n\n<a href=\"#face\">x</a>\n\n[x]{#beef .key}\n\n"
                 "Ticket #123 is open.\n")
