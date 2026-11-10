@@ -119,7 +119,7 @@ class StandaloneTest(unittest.TestCase):
         source = (REPO / "check_look.py").read_text()
         self.assertNotIn("sys.path", source)
         imports = re.findall(r"(?m)^\s*(?:from ([\w.]+) import|import ([\w.]+))", source)
-        self.assertEqual({a or b for a, b in imports}, {"re", "sys", "pathlib"})
+        self.assertEqual({a or b for a, b in imports}, {"html", "re", "sys", "pathlib"})
         self.assertIn("nossaifd-talks", source.split("def _strip_comments")[0])   # the credit for the scanner
 
 

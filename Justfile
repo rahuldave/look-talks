@@ -10,8 +10,9 @@ smalldocs := "uvx --from smalldocs==0.5.5 smalldocs"
 # The checker for prose, check.py of nossaifd, at a fixed commit of its main branch. Move it when
 # check.py changes there.
 nossaifd_commit := "ec80717f074c68dfa5fecb0c8c19ba49398a2f76"
-# htmpres for just example, at a fixed commit of its main branch: PR 28, which fixed the picture slides.
-htmpres_commit := "120a105cb579118097d46f4e291db4d517f3dc15"
+# htmpres for just example, at a fixed commit of its main branch: PR 30, which fails a picture with no
+# description and fits a picture under a title in the rest of the slide.
+htmpres_commit := "0787d97961c938aece8e6d58639ec1ed3ea79f87"
 
 [private]
 default:

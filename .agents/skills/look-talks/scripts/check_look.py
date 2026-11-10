@@ -8,8 +8,9 @@ that starts with "## ", outside code, comments and ::: blocks. A --- with only b
 slide. The first slide with {data-kind="appendix"} on its title line starts the appendix.
 
 A hard problem is a value of the look in the slides, by rule 4 of LOOK.md: a style= attribute, a <style> block, a
-color code in an attribute or a tag, a <font> tag, or an attribute that sets a color. Every other check is a soft
-note, which a person reads and judges.
+color code in an attribute or a tag, a <font> tag, or an attribute that sets a color. A picture with no
+description is also hard, by rule 14, because htmpres fails it too. Every other check is a soft note, which a
+person reads and judges.
 
 The exit status is 0 when every file passes, 1 when a file has a hard problem, and 2 for a usage error, such as a
 missing file or an unknown option.
@@ -20,6 +21,7 @@ The scanner of slides is copied from check_talk.py of nossaifd-talks, which foll
 checker needs no other file.
 """
 
+import html
 import re
 import sys
 from pathlib import Path
@@ -119,6 +121,7 @@ class Slide:
         self.html: list[tuple[int, str]] = []    # raw HTML that reaches the slide: {=html} blocks and <pre> blocks
         self.fences: list[tuple[int, str]] = []  # the opening line of each fenced code block, with its attributes
         self.script: list[tuple[int, str]] = []  # the lines of the notes
+        self.script_text: list[tuple[int, str]] = []  # the notes outside code, with HTML comments removed
         self.notes = False                       # the slide has a ::: notes block
         self.appendix = False
 
@@ -182,6 +185,9 @@ def split(text: str) -> tuple[list[str], list[Slide]]:
                 notes_depth = -1
             else:
                 current.script.append((number, raw))
+                if kind == "body":
+                    visible = _strip_comments(raw, line["in_comment"])[0] if "<!--" in raw or line["in_comment"] else raw
+                    current.script_text.append((number, visible))
             continue
         if kind == "body" and not line["in_comment"] and NOTES.match(raw):
             notes_depth, current.notes = line["depth"], True
@@ -440,25 +446,86 @@ def class_blocks(text: str, name: str) -> list[str]:
     return found
 
 
-def undescribed(slide: Slide) -> list[int]:
-    "The file line of each picture with no description outside code and math: Markdown, a reference, or <img> with no alt."
-    raw = slide.text()
-    blanked = math_blanked(raw)
-    starts = [0]
-    for text in raw.split("\n"):
-        starts.append(starts[-1] + len(text) + 1)
-    found = []
-    for match in re.finditer(r"!\[([^\]]*)\]\s*[(\[]|<img\b[^>]*>", raw, re.I):
-        if blanked[match.start():match.start() + 2] != raw[match.start():match.start() + 2]:
-            continue
-        if match.group(0).startswith("<"):
-            empty = not re.search(r"\balt\s*=", match.group(0), re.I)
-        else:
-            empty = not match.group(1).strip()
-        if empty:
-            index = next(i for i, s in enumerate(starts) if s > match.start()) - 1
-            found.append(slide.body[index][0])
+# A Markdown picture: its description, its target or reference, and its attributes. A title in quotes may hold ")".
+MD_IMAGE = re.compile(r"(?<!\\)!\[([^\]]*)\](?:(\((?:[^)\"']|\"[^\"]*\"|'[^']*')*\))|\[([^\]]*)\])?"
+                      r"(\{(?:[^}\"']|\"[^\"]*\"|'[^']*')*\})?")
+HTML_IMAGE = re.compile(r"<img(?=[\s/>])(?:[^>\"']|\"[^\"]*\"|'[^']*')*>", re.I)
+REFERENCE = re.compile(r"^ {0,3}\[([^\]]+)\]:[ \t]*\S+(?:[ \t]+(?:\"[^\"]*\"|'[^']*'|\([^)]*\)))?[ \t]*"
+                       r"(\{[^}]*\})?[ \t]*$")
+
+
+def image_classes(attributes: str) -> set[str]:
+    "The classes in Markdown attributes, as {.a .b class=\"c d\"}."
+    found = set(re.findall(r"(?:^|[\s{])\.([^\s}.]+)(?=[\s}]|$)", attributes))
+    for match in re.finditer(r"(?:^|[\s{])class=(?:\"([^\"]*)\"|'([^']*)'|([^\s}]+))", attributes):
+        found.update((match.group(1) or match.group(2) or match.group(3) or "").split())
     return found
+
+
+def tag_attributes(tag: str) -> dict[str, str]:
+    "The attributes of an HTML tag, with lower-case names and decoded values, as htmpres's tagAttributes reads them."
+    found = {}
+    for match in re.finditer(r"([^\s\"'>/=]+)(?:\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+)))?", tag[4:]):
+        value = next((v for v in match.group(2, 3, 4) if v is not None), "")
+        found.setdefault(match.group(1).lower(), html.unescape(value))
+    return found
+
+
+def references(slides: list[Slide]) -> dict[str, str]:
+    "The attributes of each reference definition of the deck, by its label in lower case, as [clock]: a.svg {.x}."
+    found = {}
+    for slide in slides:
+        for _, text in slide.body:
+            match = REFERENCE.match(text)
+            if match:
+                found.setdefault(" ".join(match.group(1).lower().split()), match.group(2) or "")
+    return found
+
+
+def hide_raw_content(text: str) -> str:
+    "Raw HTML with the contents of <script>, <style>, <textarea> and comments blanked, as htmpres skips them."
+    blank = lambda m: re.sub(r"[^\n]", " ", m.group(0))
+    text = re.sub(r"<!--.*?(?:-->|$)", blank, text, flags=re.S)
+    return re.sub(r"<(script|style|textarea)\b.*?(?:</\1\s*>|$)", blank, text, flags=re.S | re.I)
+
+
+def undescribed(slide: Slide, refs: dict[str, str] | None = None) -> list[int]:
+    """The file line of each picture with no description, as htmpres finds it: Markdown, a reference, or <img>
+    with no alt or an empty alt, in the title, the body, the notes or raw HTML, outside code, comments and math.
+    A picture marked .decorative may have an empty description, and so may an <img> with aria-hidden="true"."""
+    refs = refs or {}
+    found = []
+    for lines, raw_html in (([(slide.line, slide.title)], False), (slide.body, False), (slide.script_text, False),
+                            (slide.html, True)):
+        raw = "\n".join(text for _, text in lines)
+        blanked = hide_raw_content(raw) if raw_html else math_blanked(raw)
+        starts = [0]
+        for text in raw.split("\n"):
+            starts.append(starts[-1] + len(text) + 1)
+        offsets = []
+        pictures = [] if raw_html else list(MD_IMAGE.finditer(blanked))
+        for match in pictures:
+            description, target, label, attributes = match.groups()
+            description = raw[match.start(1):match.end(1)]   # code and math in a description are words
+            if target is None and label is None and not description.strip():
+                continue          # ![] alone is not a picture
+            if target is None:
+                key = " ".join((label or description).lower().split())
+                if key not in refs:
+                    continue      # no reference definition: Pandoc reads it as text
+                attributes = attributes or refs[key]
+            empty = not re.sub(r"<[^>]*>", "", description).strip()
+            if empty and "decorative" not in image_classes(attributes or ""):
+                offsets.append(match.start())
+        for match in HTML_IMAGE.finditer(blanked):
+            attrs = tag_attributes(match.group(0))
+            if attrs.get("aria-hidden", "").lower() == "true" or "decorative" in attrs.get("class", "").split():
+                continue
+            if not attrs.get("alt", "").strip():
+                offsets.append(match.start())
+        for offset in offsets:
+            found.append(lines[next(i for i, s in enumerate(starts) if s > offset) - 1][0])
+    return sorted(found)
 
 
 def images(slide: Slide) -> list[str]:
@@ -470,8 +537,12 @@ def images(slide: Slide) -> list[str]:
     return found
 
 
-def check_pictures(slide: Slide, first: bool, last: bool, soft: list[str]) -> None:
-    "Soft: descriptions, text on pictures, credits and logos, by rules 14, 15, 24 and 27."
+def check_pictures(slide: Slide, first: bool, last: bool, hard: list[str], soft: list[str],
+                   refs: dict[str, str] | None = None) -> None:
+    "Hard: a picture with no description, which htmpres also fails. Soft: text on pictures, credits and logos."
+    for line in undescribed(slide, refs):
+        hard.append(f"{slide.where(line)}: a picture with no description. Describe it in the brackets, for a screen "
+                    f"reader, or mark a picture that only decorates with {{.decorative}}, by rule 14")
     text = slide.text()
     photos = [src for src in images(slide) if PHOTO.search(src) or re.match(r"https?://", src)]
     credits = marks(text, "credit")
@@ -482,9 +553,6 @@ def check_pictures(slide: Slide, first: bool, last: bool, soft: list[str]) -> No
         if re.search(r"(?<!\()https?://", credit) or sentences(credit) > 1:
             soft.append(f"{slide.where()}: a long credit. Keep the credit short, and put the record on an endnote "
                         f"slide, by rule 24")
-    for line in undescribed(slide):
-        soft.append(f"{slide.where(line)}: a picture with no description. Describe it in the brackets, for a screen "
-                    f"reader, by rule 14")
     layers = layer_blocks(text)
     for block in layers:
         words = re.sub(r"\[([^\]]*)\]\{[^}]*\}", r"\1", "\n".join(block.split("\n")[1:]))
@@ -577,9 +645,10 @@ def check(path: Path) -> tuple[list[str], list[str], str]:
     check_settings(deck_settings(matter), has_matter, soft)
     check_values(slides, hard)
     main = [slide for slide in slides if not slide.appendix]
+    refs = references(slides)
     for slide in slides:
         check_marks(slide, soft)
-        check_pictures(slide, bool(main) and slide is main[0], bool(main) and slide is main[-1], soft)
+        check_pictures(slide, bool(main) and slide is main[0], bool(main) and slide is main[-1], hard, soft, refs)
         check_space(slide, soft)
         check_motion(slide, soft)
     check_deck(slides, soft)

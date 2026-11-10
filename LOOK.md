@@ -6,7 +6,8 @@ to make, how to mark what matters, and how to place pictures and space. It also 
 consistent, and how to check the look.
 
 The guide gives no sizes, no colors and no fonts. The theme of htmpres holds those values, and the author
-chooses a theme and marks the meaning. The checker, `check_look.py`, fails a slide that sets a value.
+chooses a theme and marks the meaning. The checker, `check_look.py`, fails a slide that sets a value,
+or that has a picture with no description.
 
 ## Who decides what
 
@@ -164,6 +165,10 @@ Each kind of slide below has its syntax in htmpres. Use the same kind for the sa
     the picture to fill the slide. Use `.ds-fit` when the audience must see the whole picture. A slide can also
     take a picture as its background, with `data-background-image` on its `##` line, by rule 63 of TALKS.md.
     A screen reader skips a background, so use a background only for a picture that adds no information.
+
+    For a picture inside the slide that adds no information, write an empty description and mark the
+    picture `.decorative`, as in `![](assets/texture.svg){.decorative .ds-fit}`. htmpres fails a picture with an
+    empty description and no `.decorative`.
 15. **Put words over a picture only on a ground.** A photo has light parts and dark parts. Text that reads well on
     one part is lost on the other (Wathan and Schoger, "Text needs consistent contrast", pages 202 to 204).
     Schwabish puts large text on a quiet part of the picture, or on a box (Schwabish, pages 120 and 121). Put
@@ -299,5 +304,6 @@ uv run --no-project python check_look.py slides.qmd       # report the hard prob
 uv run --no-project python check_look.py -v slides.qmd    # also show the soft notes
 ```
 
-A hard problem fails the check. The only hard problems are values of the look in the slides, by rule 4.
+A hard problem fails the check. The hard problems are values of the look in the slides, by rule 4, and a
+picture with no description, by rule 14.
 [The page on the checker](https://github.com/rahuldave/look-talks/blob/main/docs/check-look.md) lists each check.

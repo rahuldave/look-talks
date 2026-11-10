@@ -1,6 +1,6 @@
 ---
 name: look-talks
-description: Use when you choose the look of the slides of a talk in htmpres, for example the theme and the mode, the kind of each slide, the marks of importance, the pictures and their credits, the space and the builds. It gives rules from the books of Jonathan Schwabish and of Adam Wathan and Steve Schoger, the htmpres syntax of each kind of slide, an example deck, and a checker that fails a slide that sets a color, a font or a size. It does not cover charts, or the words and the order of a talk.
+description: Use when you choose the look of the slides of a talk in htmpres, for example the theme and the mode, the kind of each slide, the marks of importance, the pictures and their credits, the space and the builds. It gives rules from the books of Jonathan Schwabish and of Adam Wathan and Steve Schoger, the htmpres syntax of each kind of slide, an example deck, and a checker that fails a slide that sets a color, a font or a size, or that has a picture with no description. It does not cover charts, or the words and the order of a talk.
 license: MIT, copyright (c) 2026 Rahul Dave. The full text is in the LICENSE file of https://github.com/rahuldave/look-talks
 ---
 

@@ -94,6 +94,11 @@ kept the dark ink of the paper, and the first version of this guide kept text of
 keeps the description of a full picture for the screen reader, and it hides the caption. It also fits a
 picture under a title in the rest of the space. So rule 14 asks for a description on every picture.
 
+htmpres pull request 30, of 10 November 2026, fails a picture with an empty description, with the error
+`image-description`. Its mark `.decorative` lets a picture that only decorates have an empty description. So
+the checker of this guide also fails a picture with no description, and it accepts `.decorative`. The same
+change lets a picture under a title grow to the caption, the credit and the section label.
+
 ## Rules that the guide keeps in TALKS.md
 
 TALKS.md already has rules on the look of slides, such as rule 59 on builds, rule 62 on columns, rule 63 on the
