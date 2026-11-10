@@ -8,8 +8,8 @@ the checks of the whole deck. It gives no sizes, colors or fonts, because the th
 The project has four parts:
 
 - **[The guide, LOOK.md](LOOK.md),** with 34 rules and the htmpres syntax of each kind of slide.
-- **[The checker, check_look.py](docs/check-look.md),** which fails a slide that sets a color, a font or a size,
-  and notes the other rules that a program can measure.
+- **[The checker, check_look.py](docs/check-look.md),** which fails a slide that sets a color, a font or a size, or
+  that has a picture with no description, and notes the other rules that a program can measure.
 - **[The example deck](https://github.com/rahuldave/look-talks/blob/main/examples/cache/slides.qmd),** a talk about a cache with each kind of slide.
 - **The agent skill,** in `.agents/skills/look-talks`.
 

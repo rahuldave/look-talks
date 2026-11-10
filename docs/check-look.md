@@ -27,7 +27,9 @@ Both checkers split a deck the same way.
 
 ## Hard problems
 
-A hard problem is a value of the look in the slides, by rule 4. The theme holds every value.
+A hard problem is a value of the look in the slides, by rule 4, or a picture with no description, by rule 14.
+The theme holds every value. htmpres also fails a picture with no description, with the error
+`image-description`.
 
 | Check | Example that fails |
 |---|---|
@@ -36,6 +38,7 @@ A hard problem is a value of the look in the slides, by rule 4. The theme holds 
 | An attribute that sets a color | `data-match-colors="mean=#245c88"`, `data-background="red"`, `bgcolor`, `fill` |
 | A color code, a color function, a gradient or a CSS variable in the value of an attribute | `[x]{data-tint="#ff0000"}`, `rgb(1, 2, 3)` |
 | A `<font>` tag | `<font face="Arial">` |
+| A picture with an empty description and no `.decorative`, in the title, the slide, the notes or raw HTML | `![](a.svg)`, `<img src="a.svg" alt="">` |
 
 An id such as `{#cafe}` and a link such as `[back](#bad)` look like color codes, and they pass. The checker
 ignores the values of `id`, `href`, `src` and `data-background-image`. A color code passes in a value with other
@@ -58,7 +61,7 @@ second key mark.
 | A line has three or more words in capitals | 9 |
 | The first slide has no `.hero-title` | 10 |
 | The deck has two or more sections and no `.section-divider` slide | 11 |
-| A picture has no description, or an `<img>` has no `alt`, or a `.ds-full` picture has a visible title over it | 14 |
+| A `.ds-full` picture has a visible title over it | 14 |
 | A slide has more than one `.ds-layer` block, a layer holds more than one sentence or line, or a layer has no full picture or background picture on its slide | 15 |
 | A `.quote` slide has no `.source` or no Markdown quote, or a `.source` has no `.quote` slide | 18 |
 | The last slide of the main talk has no `.statement` | 20 |

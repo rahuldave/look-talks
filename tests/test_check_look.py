@@ -242,9 +242,9 @@ class PicturesTest(unittest.TestCase):
         self.assertTrue(notes_with(run(body)[1], "long credit"))
 
     def test_a_picture_with_no_description_is_noted(self):
-        self.assertTrue(notes_with(run("## A\n\n![](assets/flow.svg)\n")[1], "no description"))
+        self.assertTrue(notes_with(run("## A\n\n![](assets/flow.svg)\n")[0], "no description"))
         body = "## {data-title=\"P\"}\n\n::: {.ds-full .ds-media}\n![ ](a.svg){.ds-fill}\n:::\n"
-        self.assertTrue(notes_with(run(body)[1], "no description"))
+        self.assertTrue(notes_with(run(body)[0], "no description"))
 
     def test_an_empty_description_in_code_or_math_passes(self):
         self.assertEqual(run("## A\n\nWrite `![](x.svg)` with a description.\n")[1], [])
@@ -322,9 +322,93 @@ class PicturesTest(unittest.TestCase):
 
     def test_a_reference_image_or_an_img_with_no_alt_is_noted(self):
         # Review finding: ![][ref] and <img> with no alt were not checked.
-        self.assertTrue(notes_with(run("## A\n\n![][clock]\n\n[clock]: a.svg\n")[1], "no description"))
-        self.assertTrue(notes_with(run("## A\n\n<img src=\"a.svg\">\n")[1], "no description"))
+        self.assertTrue(notes_with(run("## A\n\n![][clock]\n\n[clock]: a.svg\n")[0], "no description"))
+        self.assertTrue(notes_with(run("## A\n\n<img src=\"a.svg\">\n")[0], "no description"))
         self.assertEqual(run("## A\n\n<img src=\"a.svg\" alt=\"A clock\">\n")[1], [])
+
+    def test_a_picture_with_no_description_is_hard_as_in_htmpres(self):
+        # htmpres 0787d97 fails an empty description with the error image-description.
+        hard, soft = run("## A\n\n![](a.svg){.ds-fit}\n")[:2]
+        self.assertTrue(notes_with(hard, "no description"))
+        self.assertFalse(notes_with(soft, "no description"))
+
+    def test_a_decorative_picture_may_have_no_description(self):
+        self.assertEqual(run("## A\n\n![](a.svg){.decorative .ds-fit}\n")[0], [])
+        self.assertEqual(run("## A\n\n![](a.svg){.ds-fit .decorative}\n")[0], [])
+        self.assertEqual(run("## A\n\n<img src=\"a.svg\" class=\"decorative\" alt=\"\">\n")[0], [])
+
+    def test_decorative_must_be_on_the_picture(self):
+        self.assertTrue(notes_with(run("## A\n\n![](a.svg){.ds-fit}\n\n[x]{.decorative}\n")[0], "no description"))
+        self.assertTrue(notes_with(run("## A\n\n![](a.svg){.undecorative}\n")[0], "no description"))
+
+    def test_an_img_with_an_empty_alt_is_hard_unless_decorative(self):
+        self.assertTrue(notes_with(run("## A\n\n<img src=\"a.svg\" alt=\"\">\n")[0], "no description"))
+        self.assertTrue(notes_with(run("## A\n\n<img src=\"a.svg\" alt=\" \">\n")[0], "no description"))
+
+    def test_a_picture_in_the_notes_needs_a_description(self):
+        body = "## A\n\nText.\n\n::: notes\nSay this. ![](a.svg)\n:::\n"
+        self.assertTrue(notes_with(run(body)[0], "no description"))
+        self.assertEqual(run("## A\n\nText.\n\n::: notes\nWrite `![](a.svg)`.\n:::\n")[0], [])
+
+    def test_a_described_picture_passes(self):
+        self.assertEqual(run("## A\n\n![A clock](a.svg){.ds-fit}\n")[0], [])
+        self.assertEqual(run("## A\n\n![`x`](a.svg)\n")[0], [])
+
+    # Review findings: each case below is one where check_look.py and the htmpres lint of 0787d97 disagreed.
+    def assertHard(self, body):
+        self.assertTrue(notes_with(run("## A\n\nText.\n\n" + body)[0], "no description"), body)
+
+    def assertPasses(self, body):
+        self.assertEqual(run("## A\n\nText.\n\n" + body)[0], [], body)
+
+    def test_code_and_comments_in_the_notes_pass(self):
+        self.assertPasses("::: notes\n```\n![](a.svg)\n```\n:::\n")
+        self.assertPasses("::: notes\nSay this.\n\n    ![](a.svg)\n:::\n")
+        self.assertPasses("::: notes\n<!-- ![](a.svg) -->\n:::\n")
+
+    def test_script_and_style_in_raw_html_pass(self):
+        self.assertPasses("```{=html}\n<script>const s = '<img src=x>';</script>\n```\n")
+        self.assertPasses("```{=html}\n<!-- <img src=x> -->\n```\n")
+        self.assertHard("```{=html}\n<img src=\"x.svg\">\n```\n")
+
+    def test_decorative_written_in_other_ways_passes(self):
+        self.assertPasses('![](a.svg){class="decorative"}\n')
+        self.assertPasses("![][r]\n\n[r]: a.svg {.decorative}\n")
+        self.assertPasses('![](a.svg){title="a}b" .decorative}\n')
+
+    def test_a_title_with_brackets_keeps_the_attributes(self):
+        self.assertPasses('![](a.svg "a (b) c"){.decorative}\n')
+
+    def test_an_escaped_image_or_a_space_before_the_target_is_text(self):
+        self.assertPasses("Look \\![](a.svg) here.\n")
+        self.assertPasses("![] (a.svg)\n")
+
+    def test_html_attributes_are_parsed(self):
+        self.assertPasses('<img src="a.svg" alt="" aria-hidden="true">\n')
+        self.assertPasses("<img src=\"a.svg\" alt=\"'\">\n")
+        self.assertPasses('<img-foo src="a.svg">\n')
+        self.assertHard('<img src="a.svg" data-alt="A clock">\n')
+        self.assertHard('<img src="a.svg" title="alt=clock">\n')
+        self.assertHard('<img src="a.svg" class="not-decorative" alt="">\n')
+        self.assertHard('<img src="a.svg" data-class="decorative" alt="">\n')
+
+    def test_a_picture_in_the_title_needs_a_description(self):
+        self.assertTrue(notes_with(run("## Title ![](a.svg)\n\nText.\n")[0], "no description"))
+
+    def test_character_codes_in_alt_are_decoded(self):
+        self.assertHard('<img src="a.svg" alt="&#32;">\n')
+        self.assertHard('<img src="a.svg" alt="&nbsp;">\n')
+
+    def test_only_the_exact_class_decorative_counts(self):
+        self.assertHard("![](a.svg){.decorative-ish}\n")
+
+    def test_a_description_of_only_html_is_empty(self):
+        self.assertHard("![<span></span>](a.svg)\n")
+
+    def test_the_line_of_the_picture_is_reported(self):
+        hard = run("## A\n\nText.\n\n![](a.svg)\n")[0]
+        line = len((GOOD_MATTER + TITLE).splitlines()) + 5
+        self.assertTrue(any(f"line {line}:" in h for h in hard), hard)
 
     def test_a_logo_in_the_middle_is_noted(self):
         self.assertTrue(notes_with(run("## A\n\n![Our logo](assets/logo.svg)\n")[1], "logo"))
