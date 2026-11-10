@@ -241,29 +241,90 @@ class PicturesTest(unittest.TestCase):
         body = "## A\n\n![A view](v.jpg)\n\n[Photo: https://example.com/a/very/long/path]{.credit}\n"
         self.assertTrue(notes_with(run(body)[1], "long credit"))
 
-    def test_a_layer_and_text_on_a_background_are_noted(self):
-        self.assertTrue(notes_with(run("## A\n\n::: {.ds-layer}\nText\n:::\n")[1], ".ds-layer"))
-        body = "## A {data-background-image=\"assets/v.svg\"}\n\nText.\n"
-        self.assertTrue(notes_with(run(body)[1], "background picture"))
-        body = "## {data-background-image=\"assets/v.svg\"}\n\n::: notes\nCue: the mood\n:::\n"
+    def test_a_picture_with_no_description_is_noted(self):
+        self.assertTrue(notes_with(run("## A\n\n![](assets/flow.svg)\n")[1], "no description"))
+        body = "## {data-title=\"P\"}\n\n::: {.ds-full .ds-media}\n![ ](a.svg){.ds-fill}\n:::\n"
+        self.assertTrue(notes_with(run(body)[1], "no description"))
+
+    def test_an_empty_description_in_code_or_math_passes(self):
+        self.assertEqual(run("## A\n\nWrite `![](x.svg)` with a description.\n")[1], [])
+        self.assertEqual(run("## A\n\n```markdown\n![](x.svg)\n```\n")[1], [])
+
+    def test_a_long_layer_is_noted(self):
+        body = ("## {data-title=\"P\"}\n\n::: {.ds-full .ds-media .ds-readable}\n![A clock](a.svg){.ds-fill}\n:::\n\n"
+                "::: {.ds-layer}\n[Registration opens at nine.]{.key} Every student searches at once.\n:::\n")
+        self.assertTrue(notes_with(run(body)[1], "more than one sentence"))
+
+    def test_a_layer_with_no_full_picture_is_noted(self):
+        self.assertTrue(notes_with(run("## A\n\n::: {.ds-layer}\nText\n:::\n")[1], "no .ds-full picture"))
+
+    def test_text_on_a_background_passes(self):
+        body = "## A {data-background-image=\"assets/v.svg\"}\n\n[Read once, then reuse.]{.key}\n"
         self.assertEqual(run(body)[1], [])
 
     def test_a_full_picture_under_a_title_is_noted(self):
-        body = "## A title\n\n::: {.ds-full .ds-media .ds-no-pad}\n![](a.svg){.ds-fill}\n:::\n"
+        body = "## A title\n\n::: {.ds-full .ds-media .ds-no-pad}\n![A clock](a.svg){.ds-fill}\n:::\n"
         self.assertTrue(notes_with(run(body)[1], "under a title"))
 
-    def test_readable_on_a_full_picture_is_noted(self):
-        body = "## {data-title=\"P\"}\n\n::: {.ds-full .ds-media .ds-readable}\n![](a.svg){.ds-fill}\n:::\n"
-        self.assertTrue(notes_with(run(body)[1], ".ds-readable"))
-
-    def test_a_description_on_a_full_picture_is_noted(self):
-        body = "## {data-title=\"P\"}\n\n::: {.ds-full .ds-media}\n![A clock](a.svg){.ds-fill}\n:::\n"
-        self.assertTrue(notes_with(run(body)[1], "description"))
-
-    def test_the_two_working_picture_forms_pass(self):
-        body = ("## {data-title=\"P\"}\n\n::: {.ds-full .ds-media .ds-no-pad}\n![](a.svg){.ds-fill}\n:::\n\n"
-                "::: notes\nCue: a clock\n:::\n\n## A title\n\n::: {.ds-media}\n![A clock](a.svg){.ds-fit}\n:::\n")
+    def test_the_htmpres_picture_forms_pass(self):
+        body = ("## A title\n\n![A clock](a.svg){.ds-fit}\n\n"
+                "## {data-title=\"P\"}\n\n::: {.ds-full .ds-media .ds-no-pad}\n![A clock](a.svg){.ds-fill}\n:::\n\n"
+                "## {data-title=\"Q\"}\n\n::: {.ds-full .ds-media .ds-no-pad .ds-readable}\n"
+                "![A clock](a.svg){.ds-fill}\n:::\n\n::: {.ds-layer}\n[Registration opens at nine.]{.key}\n:::\n\n"
+                "## A title {data-background-image=\"assets/v.svg\"}\n\n[Read once, then reuse.]{.key}\n")
         self.assertEqual(run(body)[1], [])
+
+    def test_a_hidden_title_over_a_full_picture_passes(self):
+        # Review finding: htmpres's full-media scaffold hides the title with .title-hidden.
+        body = "## A clock {.title-hidden}\n\n::: {.ds-full .ds-media .ds-no-pad}\n![A clock](a.svg){.ds-fill}\n:::\n"
+        self.assertEqual(run(body)[1], [])
+
+    def test_a_layer_with_a_nested_block_is_read_whole(self):
+        # Review finding: the first bare ::: ended the block, so the words after a nested block were lost.
+        full = "## {data-title=\"P\"}\n\n::: {.ds-full .ds-media}\n![A clock](a.svg){.ds-fill}\n:::\n\n"
+        body = full + ":::: {.ds-layer}\n::: aside\nA note.\n:::\nOne. Two. Three.\n::::\n"
+        self.assertTrue(notes_with(run(body)[1], "more than one sentence"))
+        body = full + "::: {.ds-layer}\n::: {.incremental}\n- a\n:::\nOne. Two.\n:::\n"
+        self.assertTrue(notes_with(run(body)[1], "more than one sentence"))
+
+    def test_bare_word_picture_blocks_are_found(self):
+        # Review finding: ::: ds-full and ::: ds-layer were not found.
+        body = "## A title\n\n::: ds-full\n![A clock](a.svg){.ds-fill}\n:::\n\n::: ds-layer\nOne. Two.\n:::\n"
+        notes = run(body)[1]
+        self.assertTrue(notes_with(notes, "under a title"))
+        self.assertTrue(notes_with(notes, "more than one sentence"))
+
+    def test_a_layer_on_a_background_picture_passes(self):
+        # Review finding: htmpres grounds a layer on a background slide too.
+        body = "## {data-background-image=\"a.svg\"}\n\n::: {.ds-layer}\n[Read once, then reuse.]{.key}\n:::\n"
+        self.assertEqual(run(body)[1], [])
+
+    def test_a_layer_before_its_full_picture_passes(self):
+        # Review finding: the order does not matter on screen, and the note says "on its slide".
+        body = ("## {data-title=\"P\"}\n\n::: {.ds-layer}\n[Read once.]{.key}\n:::\n\n"
+                "::: {.ds-full .ds-media}\n![A clock](a.svg){.ds-fill}\n:::\n")
+        self.assertEqual(run(body)[1], [])
+        self.assertTrue(notes_with(run("## A\n\n::: {.ds-layer}\nText\n:::\n")[1], "on its slide"))
+
+    def test_two_layers_or_a_list_in_a_layer_are_noted(self):
+        # Review finding: two layers of one sentence each, and a heading with a list, gave no note.
+        full = "## {data-title=\"P\"}\n\n::: {.ds-full .ds-media}\n![A clock](a.svg){.ds-fill}\n:::\n\n"
+        body = full + "::: {.ds-layer}\nOne.\n:::\n\n::: {.ds-layer}\nTwo.\n:::\n"
+        self.assertTrue(notes_with(run(body)[1], "more than one .ds-layer"))
+        body = full + "::: {.ds-layer}\n### Why\n\n- one\n- two\n- three\n:::\n"
+        self.assertTrue(notes_with(run(body)[1], "more than one sentence"))
+
+    def test_a_description_of_code_or_math_passes(self):
+        # Review finding: the code or math in a description was blanked before the check.
+        self.assertEqual(run("## A\n\n![`x`](a.svg)\n")[1], [])
+        self.assertEqual(run("## A\n\n![$x^2$ grows](a.svg)\n")[1], [])
+        self.assertEqual(run("## A\n\n$$\n![](a.svg)\n$$\n")[1], [])
+
+    def test_a_reference_image_or_an_img_with_no_alt_is_noted(self):
+        # Review finding: ![][ref] and <img> with no alt were not checked.
+        self.assertTrue(notes_with(run("## A\n\n![][clock]\n\n[clock]: a.svg\n")[1], "no description"))
+        self.assertTrue(notes_with(run("## A\n\n<img src=\"a.svg\">\n")[1], "no description"))
+        self.assertEqual(run("## A\n\n<img src=\"a.svg\" alt=\"A clock\">\n")[1], [])
 
     def test_a_logo_in_the_middle_is_noted(self):
         self.assertTrue(notes_with(run("## A\n\n![Our logo](assets/logo.svg)\n")[1], "logo"))

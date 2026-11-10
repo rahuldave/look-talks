@@ -80,17 +80,19 @@ calls these values explicit author overrides
 The guide forbids them, by rule 64 of TALKS.md and rule 4 of this guide. A color set on one slide is not
 checked in the other mode, and it breaks the system of the theme. To change a color, change the theme.
 
-## Text over a picture waits for htmpres
+## Text over a picture sits on a solid ground
 
 Both books put text over a picture, on a quiet part or on a box with some transparency. Schwabish shows it on
 pages 120 and 121, and Wathan and Schoger in "Text needs consistent contrast", pages 202 to 204.
 
-On htmpres main of 9 November
-2026, the text over a full picture keeps the ink of the paper, which is dark on a dark picture in a light
-theme. The text is a title, a `.ds-layer` block or the text of a slide with `data-background-image`. The class
-`.ds-readable` pulls the picture back under the title, and a description of a full picture shows as a caption
-that the slide cuts off. So rule 15 keeps text off pictures for now, and rule 14 teaches the two forms that
-work. The rules change when htmpres shows text over a picture.
+A box with some transparency cannot promise contrast, because a photo can be bright in one place and dark in
+another. So htmpres puts a solid ground from the theme under a `.ds-layer` block, under the text of a slide
+with `data-background-image`, and under the section label. Rule 15 uses that ground.
+
+htmpres added the ground in its pull request 28, of 10 November 2026. Before that change, text over a picture
+kept the dark ink of the paper, and the first version of this guide kept text off pictures. The same change
+keeps the description of a full picture for the screen reader, and it hides the caption. It also fits a
+picture under a title in the rest of the space. So rule 14 asks for a description on every picture.
 
 ## Rules that the guide keeps in TALKS.md
 

@@ -58,8 +58,8 @@ second key mark.
 | A line has three or more words in capitals | 9 |
 | The first slide has no `.hero-title` | 10 |
 | The deck has two or more sections and no `.section-divider` slide | 11 |
-| A `.ds-full` picture has a title over it, `.ds-readable` on its block, or a description | 14 and 15 |
-| A slide has a `.ds-layer` block, or text on a background picture | 15 |
+| A picture has no description, or an `<img>` has no `alt`, or a `.ds-full` picture has a visible title over it | 14 |
+| A slide has more than one `.ds-layer` block, a layer holds more than one sentence or line, or a layer has no full picture or background picture on its slide | 15 |
 | A `.quote` slide has no `.source` or no Markdown quote, or a `.source` has no `.quote` slide | 18 |
 | The last slide of the main talk has no `.statement` | 20 |
 | A photo has no `.credit`, or a credit holds a web address or more than one sentence | 24 |

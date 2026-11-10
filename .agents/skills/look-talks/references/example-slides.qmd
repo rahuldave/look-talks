@@ -50,23 +50,25 @@ One student in five gives up and tries again later.
 
 ## {#clock data-title="Nine in the morning" data-section="Students wait eight seconds at nine"}
 
-::: {.ds-full .ds-media .ds-no-pad}
-![](assets/clock.svg){.ds-fill}
+::: {.ds-full .ds-media .ds-no-pad .ds-readable}
+![A clock shows nine in the morning](assets/clock.svg){.ds-fill}
+:::
+
+::: {.ds-layer}
+[Registration opens at nine.]{.key}
 :::
 
 [Drawing: look-talks example, [record](#sources).]{.credit}
 
 ::: notes
-Cue: the picture alone, a clock at nine; let it sit
-The picture is a clock at nine in the morning.
-That's when registration opens.
+Cue: the clock; let it sit
+Registration opens at nine in the morning.
+That's the moment every student searches at once.
 :::
 
 ## Every student waits for one database {#queue data-section="Students wait eight seconds at nine"}
 
-::: {.ds-media}
 ![A long line of students waits before one database](assets/queue.svg){.ds-fit}
-:::
 
 [Drawing: look-talks example, [record](#sources).]{.credit}
 

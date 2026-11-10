@@ -61,8 +61,9 @@ The checker needs only Python 3.11 or later, with no other packages, and no othe
 - **The slides** hold no color, font, size or `style=`. The checker passes them.
 - **Each slide** has at most one dominant mark, a `.statement` or a `.key`.
 - **Each section** starts with a header slide, and the main talk ends on the headline as a `.statement`.
-- **Each picture** fills its space, is sharp, and has a short `.credit` when you did not make it.
-- **No text** sits over a picture.
+- **Each picture** fills its space, is sharp, has a description, and has a short `.credit` when you did not
+  make it.
+- **Text over a picture** is one short sentence in a `.ds-layer` block.
 - **The builds** appear and dim, with no other effects.
 - **The audience** sees no slide number, and a logo only on the first and the last slides.
 - **The deck** reads from across the room, in the mode of the room and in grey.

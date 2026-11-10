@@ -60,6 +60,15 @@ class PackageTest(unittest.TestCase):
             self.assertTrue((SKILL / name).is_file(), name)
 
 
+    def test_the_example_recipe_uses_a_pinned_htmpres_and_no_checkout(self):
+        # Review finding: the recipe read htmpres main, which moves, and it once read a local checkout.
+        justfile = (REPO / "Justfile").read_text()
+        self.assertRegex(justfile, r'(?m)^htmpres_commit := "[0-9a-f]{40}"$')
+        recipe = justfile[justfile.index("example ref=htmpres_commit:"):justfile.index("# Build the site")]
+        self.assertNotIn("git -C", recipe)
+        self.assertIn('rm -rf -- "$work/_extensions"', recipe)
+
+
 class GuideTest(unittest.TestCase):
     def test_the_rules_run_from_1_to_34_in_order(self):
         self.assertEqual(list(rules()), list(range(1, 35)))

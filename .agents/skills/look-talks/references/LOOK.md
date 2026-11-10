@@ -132,41 +132,62 @@ Each kind of slide below has its syntax in htmpres. Use the same kind for the sa
 13. **Start a text slide from an empty slide, and keep only what the audience must see.** If you say a short
     point aloud, leave it off the slide (Schwabish, pages 65 to 68). Build a list one point at a time, by rule 59
     of TALKS.md, in a block from `::: {.incremental data-fragment-effect="dim"}` to `:::`.
-14. **Let a picture fill its space.** A large picture is easier to see, and it leaves no empty corners
-    (Schwabish, page 118). htmpres has two forms that work today. To show a picture under the title of a slide,
-    put it in a `.ds-media` block, and let it fill the space with `.ds-fit`:
+14. **Let a picture fill its space, and describe it.** A large picture is easier to see, and it leaves no empty
+    corners (Schwabish, page 118). Write a description in the brackets of each picture. A screen reader reads
+    it to a person who cannot see the slide. To show a picture under the title of a slide, make the picture
+    the only content of the slide, apart from its credit and the notes:
 
     ```markdown
     ## Every student waits for one database
 
-    ::: {.ds-media}
     ![A long line of students waits before one database](https://example.com/photo.jpg){.ds-fit}
-    :::
+
+    [Photo: Creator, source and licence.]{.credit}
     ```
 
-    To fill the whole slide, use a slide with no title and the `.ds-full` container. Give the slide a name with
-    `data-title`, and describe the picture in the notes:
+    htmpres fits the picture, its description and its credit under the title, and keeps the shape of the
+    picture. The description also shows under the picture as a caption. A sentence under the picture stops
+    the fit, so put the words in the title, or beside the picture by rule 17. To fill the whole slide, use a slide
+    with no title and the `.ds-full` container, and give the slide a name with `data-title`:
 
     ```markdown
     ## {data-title="The line at nine"}
 
     ::: {.ds-full .ds-media .ds-no-pad}
-    ![](https://example.com/photo.jpg){.ds-fill}
+    ![A long line of students waits before one database](https://example.com/photo.jpg){.ds-fill}
     :::
+
+    [Photo: Creator, source and licence.]{.credit}
     ```
 
-    The description stays empty in this form, because htmpres shows a description under a full picture as a
-    caption, which the slide cuts off. Do not add `.ds-readable` to a `.ds-full` block, because it pulls the
-    picture back under the title. The class map of htmpres shows `.ds-readable` and `.ds-layer` for text over a
-    picture, but on htmpres main of 9 November 2026 that form cuts the text off. A slide with no title and no text can also take a picture as its background,
-    with `data-background-image` on its `##` line, by rule 63 of TALKS.md. Give it notes, so that it is not empty.
-15. **Keep text off a picture.** A photo has light parts and dark parts. Text that reads well on one part is lost
-    on the other (Wathan and Schoger, "Text needs consistent contrast", pages 202 to 204). Schwabish puts large
-    text on a quiet part of the picture, or on a box with some transparency (Schwabish, pages 120 and 121).
-    htmpres cannot show text over a picture yet. A title, a `.ds-layer` block or the text of a slide with
-    `data-background-image` keeps the dark ink of the paper, even on a dark picture. Until htmpres shows text
-    over a picture, put the words in the title above the picture, or beside it by rule 17. The credit is the
-    one exception, because htmpres puts a solid ground under it.
+    In this form, htmpres hides the caption and keeps the description for the screen reader. `.ds-fill` crops
+    the picture to fill the slide. Use `.ds-fit` when the audience must see the whole picture. A slide can also
+    take a picture as its background, with `data-background-image` on its `##` line, by rule 63 of TALKS.md.
+    A screen reader skips a background, so use a background only for a picture that adds no information.
+15. **Put words over a picture only on a ground.** A photo has light parts and dark parts. Text that reads well on
+    one part is lost on the other (Wathan and Schoger, "Text needs consistent contrast", pages 202 to 204).
+    Schwabish puts large text on a quiet part of the picture, or on a box (Schwabish, pages 120 and 121). Put
+    the words in a `.ds-layer` block after a full picture. Add `.ds-readable` to the picture, which darkens it a
+    little:
+
+    ```markdown
+    ## {data-title="The line at nine"}
+
+    ::: {.ds-full .ds-media .ds-no-pad .ds-readable}
+    ![A long line of students waits before one database](https://example.com/photo.jpg){.ds-fill}
+    :::
+
+    ::: {.ds-layer}
+    [Every search reads the same rows.]{.key}
+    :::
+
+    [Photo: Creator, source and licence.]{.credit}
+    ```
+
+    The theme puts a solid ground under the layer, as it does under the credit and the section label. So the
+    words read on a dark picture, a bright picture and a mixed one. Keep the layer to one short sentence, in
+    one layer. A slide with `data-background-image` can also carry a title and a short text, because htmpres
+    puts the same ground under them.
 16. **Arrange several pictures to fill the slide together.** Do not scatter them at random sizes (Schwabish,
     pages 118 and 121). Put each picture in a `::: {.ds-media}` block, inside one `:::: {.ds-grid}` block.
 17. **Put a picture beside its text when the audience must see both.** Use `::: {.ds-left .ds-media}` for the
