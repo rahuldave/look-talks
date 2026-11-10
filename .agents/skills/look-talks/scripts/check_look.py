@@ -412,15 +412,52 @@ def check_marks(slide: Slide, soft: list[str]) -> None:
 
 def full_blocks(text: str) -> list[str]:
     "Each ::: block whose opening line carries .ds-full, from that line to its closing :::."
+    return class_blocks(text, "ds-full")
+
+
+def layer_blocks(text: str) -> list[str]:
+    "Each ::: block whose opening line carries .ds-layer, from that line to its closing :::."
+    return class_blocks(text, "ds-layer")
+
+
+def class_blocks(text: str, name: str) -> list[str]:
+    "Each ::: block whose opening line carries the class, with its nested blocks, to the ::: that closes it."
     lines, found = text.split("\n"), []
+    opening = re.compile(r"^ {0,3}:{3,}[ \t]*(?:\{[^{}]*(?<![\w-])\." + re.escape(name) + r"(?![\w-])[^{}]*\}|"
+                         + re.escape(name) + r"[ \t]*$)")
     for i, line in enumerate(lines):
-        if re.match(r"^ {0,3}:{3,}\s*\{[^{}]*(?<![\w-])\.ds-full(?![\w-])", line):
-            block = [line]
+        if opening.match(line):
+            block, depth = [line], 1
             for rest in lines[i + 1:]:
-                if re.match(r"^ {0,3}:{3,}\s*$", rest):
-                    break
+                if re.match(r"^ {0,3}:{3,}[ \t]*$", rest):
+                    depth -= 1
+                    if depth == 0:
+                        break
+                elif re.match(r"^ {0,3}:{3,}[ \t]*\S", rest):
+                    depth += 1
                 block.append(rest)
             found.append("\n".join(block))
+    return found
+
+
+def undescribed(slide: Slide) -> list[int]:
+    "The file line of each picture with no description outside code and math: Markdown, a reference, or <img> with no alt."
+    raw = slide.text()
+    blanked = math_blanked(raw)
+    starts = [0]
+    for text in raw.split("\n"):
+        starts.append(starts[-1] + len(text) + 1)
+    found = []
+    for match in re.finditer(r"!\[([^\]]*)\]\s*[(\[]|<img\b[^>]*>", raw, re.I):
+        if blanked[match.start():match.start() + 2] != raw[match.start():match.start() + 2]:
+            continue
+        if match.group(0).startswith("<"):
+            empty = not re.search(r"\balt\s*=", match.group(0), re.I)
+        else:
+            empty = not match.group(1).strip()
+        if empty:
+            index = next(i for i, s in enumerate(starts) if s > match.start()) - 1
+            found.append(slide.body[index][0])
     return found
 
 
@@ -434,9 +471,8 @@ def images(slide: Slide) -> list[str]:
 
 
 def check_pictures(slide: Slide, first: bool, last: bool, soft: list[str]) -> None:
-    "Soft: credits, text on pictures and logos, by rules 15, 24 and 27."
+    "Soft: descriptions, text on pictures, credits and logos, by rules 14, 15, 24 and 27."
     text = slide.text()
-    names = classes(text + "\n" + slide.attrs)
     photos = [src for src in images(slide) if PHOTO.search(src) or re.match(r"https?://", src)]
     credits = marks(text, "credit")
     if photos and not credits and not slide.appendix:
@@ -446,24 +482,26 @@ def check_pictures(slide: Slide, first: bool, last: bool, soft: list[str]) -> No
         if re.search(r"(?<!\()https?://", credit) or sentences(credit) > 1:
             soft.append(f"{slide.where()}: a long credit. Keep the credit short, and put the record on an endnote "
                         f"slide, by rule 24")
-    if "ds-layer" in names:
-        soft.append(f"{slide.where()}: a .ds-layer block. Its text keeps the dark ink of the paper over the picture. "
-                    f"Put the words in the title, by rule 15")
-    for block in full_blocks(text):
-        if slide.title:
-            soft.append(f"{slide.where()}: a .ds-full picture under a title, which sits on the picture in the ink of "
-                        f"the paper. Use a slide with no title, or a .ds-media block, by rules 14 and 15")
-        if "ds-readable" in classes(block.split("\n", 1)[0]):
-            soft.append(f"{slide.where()}: .ds-readable on a .ds-full block, which pulls the picture back under the "
-                        f"title. Leave it out, by rule 14")
-        if any(alt.strip() for alt in re.findall(r"!\[([^\]]*)\]", block)):
-            soft.append(f"{slide.where()}: a description on a .ds-full picture, which htmpres shows as a caption that "
-                        f"the slide cuts off. Leave it empty, and describe the picture in the notes, by rule 14")
+    for line in undescribed(slide):
+        soft.append(f"{slide.where(line)}: a picture with no description. Describe it in the brackets, for a screen "
+                    f"reader, by rule 14")
+    layers = layer_blocks(text)
+    for block in layers:
+        words = re.sub(r"\[([^\]]*)\]\{[^}]*\}", r"\1", "\n".join(block.split("\n")[1:]))
+        lines = [w for w in words.split("\n") if w.strip() and not re.match(r"^ {0,3}:{3,}", w)]
+        if sentences(words) > 1 or len(lines) > 1:
+            soft.append(f"{slide.where()}: a .ds-layer block of more than one sentence. Keep the words over a "
+                        f"picture to one short sentence, by rule 15")
+    if len(layers) > 1:
+        soft.append(f"{slide.where()}: more than one .ds-layer block. Keep the words over a picture to one short "
+                    f"sentence, by rule 15")
     background = re.search(r"data-background-image=[\"']?(?!none\b)[^\"'\s}]", slide.attrs)
-    if background and (slide.title or re.sub(r"\[[^\]]*\]\{[^}]*\.credit[^}]*\}", "", text).strip()):
-        soft.append(f"{slide.where()}: text on a background picture, where it keeps the ink of the paper. Keep the "
-                    f"slide free of text, or put the picture in a .ds-media block under the title, by rules 14 and "
-                    f"15")
+    if layers and not full_blocks(text) and not background:
+        soft.append(f"{slide.where()}: a .ds-layer block with no .ds-full picture on its slide. Put the layer on a "
+                    f"slide with a full picture, by rule 15")
+    if full_blocks(text) and slide.title and "title-hidden" not in classes(slide.attrs):
+        soft.append(f"{slide.where()}: a .ds-full picture under a title. Use a slide with no title, and name it with "
+                    f"data-title, by rule 14")
     logos = [src for src in images(slide) if re.search(r"logo", src, re.I)]
     if logos and not first and not last:
         soft.append(f"{slide.where()}: a logo. Show the logo only on the first and the last slides, by rule 27")

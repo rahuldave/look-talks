@@ -65,7 +65,7 @@ the history looks like a book. It runs the tests and the checker on the example 
 `check.py` of [nossaifd](https://github.com/rahuldave/nossaifd), and it checks the site. The same check runs on
 GitHub at each push.
 
-`just example ../htmpres` also lints and renders the example deck with a clone of htmpres.
+`just example` also lints, renders and verifies the example deck with htmpres from GitHub, at a pinned commit.
 
 ## Licence
 

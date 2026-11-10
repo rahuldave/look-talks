@@ -10,6 +10,8 @@ smalldocs := "uvx --from smalldocs==0.5.5 smalldocs"
 # The checker for prose, check.py of nossaifd, at a fixed commit of its main branch. Move it when
 # check.py changes there.
 nossaifd_commit := "ec80717f074c68dfa5fecb0c8c19ba49398a2f76"
+# htmpres for just example, at a fixed commit of its main branch: PR 28, which fixed the picture slides.
+htmpres_commit := "120a105cb579118097d46f4e291db4d517f3dc15"
 
 [private]
 default:
@@ -31,17 +33,19 @@ lint:
 look:
     {{python}} -I check_look.py -v examples/cache/slides.qmd
 
-# Lint, render and verify the example deck with an htmpres clone at a commit, origin/main unless you name one,
-# in a temporary folder: just example ../htmpres, or just example ../htmpres HEAD
-example htmpres ref="origin/main":
+# Lint, render and verify the example deck with htmpres from GitHub, at the pinned commit unless you name one,
+# in a temporary folder: just example, or just example main. It writes to no htmpres checkout.
+example ref=htmpres_commit:
     #!/usr/bin/env bash
     set -euo pipefail
-    htmpres="$(cd "$1" && pwd)"
     work="$(mktemp -d)"
     trap 'rm -rf -- "$work"' EXIT
     cp -R examples/cache/. "$work/"
-    mkdir -p "$work/_extensions"
-    git -C "$htmpres" archive "$2" _extensions/htmpres | tar -x -C "$work"
+    rm -rf -- "$work/_extensions"
+    mkdir -p "$work/htmpres"
+    curl -fsSL "https://codeload.github.com/rahuldave/htmpres/tar.gz/$1" | tar -xz -C "$work/htmpres" --strip-components=1
+    mv "$work/htmpres/_extensions" "$work/_extensions"
+    rm -rf -- "$work/htmpres"
     cd "$work"
     quarto run _extensions/htmpres/htmpres.ts lint slides.qmd --json
     quarto run _extensions/htmpres/htmpres.ts render slides.qmd
