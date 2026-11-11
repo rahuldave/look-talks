@@ -23,8 +23,8 @@ The checker needs [uv](https://docs.astral.sh/uv/), or Python 3.11 or later, and
 
 ## What is in scope
 
-This skill covers the look of the slides of a talk. Charts and data figures are out of scope. Another project,
-visualization-skill, will cover them. It has no public repository yet.
+This skill covers the look of the slides of a talk. Charts and data figures are out of scope, and another project,
+visualization-skill, will cover them. That project has no public repository yet.
 
 Two other projects do the rest of a talk:
 
@@ -66,6 +66,22 @@ the history looks like a book. It runs the tests and the checker on the example 
 GitHub at each push.
 
 `just example` also lints, renders and verifies the example deck with htmpres from GitHub, at a pinned commit.
+
+## How an agent writes the pages
+
+This repository uses the flow of [nossaifd](https://github.com/rahuldave/nossaifd/blob/main/docs/flow.md) for
+its pages. The folder `.agents/skills/` holds two skills from nossaifd, so that the flow can run.
+One is the skill `nossaifd`, and the other is the skill `declaude`, by Oskar Austegard, under the MIT
+licence, from [his repository](https://github.com/oaustegard/claude-skills/tree/6baa7290da972191749acda03c63297e67b3fc26/declauding).
+Oskar Austegard calls it declauding. The package installs only `look-talks`, and not these two skills.
+
+- `AGENTS.md` and `CLAUDE.md` tell an agent to use the nossaifd skill for each page.
+- The hooks in `.claude/settings.json` and `.codex/hooks.json` stop a turn once when a changed page has a
+  hard problem or no record of its passes.
+- The workflow `nossaifd-prose.yml` checks each page that a pull request changes.
+
+After the passes, `just prose-record page.md` records a page, and `just prose-status` lists the pages that
+still need them. `just nossaifd-install` installs the two skills again from nossaifd.
 
 ## Licence
 
