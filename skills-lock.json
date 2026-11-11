@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "skills": {
+    "declaude": {
+      "source": "rahuldave/nossaifd",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/declaude/SKILL.md",
+      "computedHash": "7a7f7e7e20a834f41a5dc0289a268d4370e858daf317a6bca6fae9d1a1d26aa3"
+    },
+    "nossaifd": {
+      "source": "rahuldave/nossaifd",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/nossaifd/SKILL.md",
+      "computedHash": "4fa8c0a444c99dfb308e9cbeeef607bbb0b3df92dfd60d4ad8423d96e2c3ffb5"
+    }
+  }
+}

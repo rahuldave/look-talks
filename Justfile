@@ -7,9 +7,10 @@ set positional-arguments
 python := "uv run --no-project --quiet python"
 smalldocs := "uvx --from smalldocs==0.5.5 smalldocs"
 
-# The checker for prose, check.py of nossaifd, at a fixed commit of its main branch. Move it when
-# check.py changes there.
-nossaifd_commit := "ec80717f074c68dfa5fecb0c8c19ba49398a2f76"
+# The skills nossaifd and declaude, from github.com/rahuldave/nossaifd, live in .agents/skills/ for the prose flow
+# of nossaifd. The declaude skill is by Oskar Austegard (github.com/oaustegard/claude-skills, MIT licence).
+# The package ships only look-talks. The checker for prose is the check.py of the nossaifd skill.
+check_py := ".agents/skills/nossaifd/scripts/check.py"
 # htmpres for just example, at a fixed commit of its main branch: PR 30, which fails a picture with no
 # description and fits a picture under a title in the rest of the slide.
 htmpres_commit := "0787d97961c938aece8e6d58639ec1ed3ea79f87"
@@ -70,14 +71,22 @@ package-lint:
     git -C "$tool_root/package-maker" checkout --quiet 6a5938c49ca71c374dc1a234a4d15134c484a741
     {{python}} "$tool_root/package-maker/skills/skill-package-maker/scripts/lint_skill_bundle.py" .
 
-# Check the Markdown pages with check.py of nossaifd
+# Check the Markdown pages with check.py of nossaifd. The skills of nossaifd are its pages, not ours
 prose:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    tool_root="$(mktemp -d)"
-    trap 'rm -rf -- "$tool_root"' EXIT
-    curl -fsSL "https://raw.githubusercontent.com/rahuldave/nossaifd/{{nossaifd_commit}}/check.py" -o "$tool_root/check.py"
-    git ls-files -z '*.md' | xargs -0 {{python}} -I "$tool_root/check.py"
+    git ls-files -z '*.md' ':!:.agents/skills/nossaifd/' ':!:.agents/skills/declaude/' | xargs -0 {{python}} -I {{check_py}}
+
+# Install the skills nossaifd and declaude again from the main branch of nossaifd, for the prose flow
+nossaifd-install:
+    npx -y skills add rahuldave/nossaifd -a codex --skill '*' -y
+
+# List the changed pages that still need the steps of the nossaifd skill
+prose-status:
+    {{python}} -I .agents/skills/nossaifd/scripts/prose_gate.py status
+
+# Record each page after step 8 of the nossaifd skill: just prose-record page.md. A path is from the current folder
+[no-cd]
+prose-record +pages:
+    {{python}} -I "{{justfile_directory()}}/.agents/skills/nossaifd/scripts/prose_gate.py" record "$@"
 
 # Check that no book is in Git, because the books are under copyright. Add --history to check every name in the history
 books-check *args:

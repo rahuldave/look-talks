@@ -12,9 +12,8 @@ space on a projected slide
 would compete with the theme. An author who follows it would set a value in a slide, and the value would fail
 in the other mode or in another theme.
 
-So the author chooses, and the theme measures. The author chooses a theme, a mode, a kind of slide and a mark
-of importance. The theme turns each choice into sizes and colors. The person decided this split on 9 November
-2026.
+The author chooses a theme, a mode, a kind of slide and a mark of importance. The theme turns each choice
+into sizes and colors. The person decided this split on 9 November 2026.
 
 ## The size of type
 
@@ -35,7 +34,7 @@ ban. It tests the real size and weight of each serif theme instead
 ([htmpres, research on presentation color](https://github.com/rahuldave/htmpres/blob/main/research/theme-audit/02-presentation-color.md)).
 
 The guide follows both sources. Rule 3 prefers a sans serif theme for a deck with much small text, and it
-lets a serif theme stay for for a deck of large text.
+lets a serif theme stay for a deck of large text.
 
 ## A picture fills the slide, and text does not have to
 
@@ -102,5 +101,5 @@ change lets a picture under a title grow to the caption, the credit and the sect
 ## Rules that the guide keeps in TALKS.md
 
 TALKS.md already has rules on the look of slides, such as rule 59 on builds, rule 62 on columns, rule 63 on the
-theme and rule 64 on color. The person chose to keep them there, and this guide cites them by number. One rule
-in one place cannot drift from a copy.
+theme and rule 64 on color. The person chose to keep them there, and this guide cites them by number. So each rule
+is in one place, where it cannot drift from a copy.

@@ -2,6 +2,10 @@
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 
 REPO = Path(__file__).resolve().parents[1]
@@ -23,7 +27,8 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(manifest["repository"]["name"], "look-talks")
         self.assertEqual(manifest["repository"]["url"], "https://github.com/rahuldave/look-talks")
         self.assertEqual(manifest["skills"], [{"name": "look-talks", "path": ".agents/skills/look-talks"}])
-        self.assertEqual(sorted(p.name for p in (REPO / ".agents/skills").iterdir()), ["look-talks"])
+        # The skills nossaifd and declaude are installed for the prose flow, and the package does not ship them
+        self.assertEqual(sorted(p.name for p in (REPO / ".agents/skills").iterdir()), ["declaude", "look-talks", "nossaifd"])
         self.assertEqual([e["name"] for e in manifest["executables"]["required"]], ["uv"])
         self.assertIn("rahuldave/look-talks", manifest["npx"]["install"])
         self.assertIn("--skill look-talks", manifest["npx"]["install"])
@@ -67,6 +72,72 @@ class PackageTest(unittest.TestCase):
         recipe = justfile[justfile.index("example ref=htmpres_commit:"):justfile.index("# Build the site")]
         self.assertNotIn("git -C", recipe)
         self.assertIn('rm -rf -- "$work/_extensions"', recipe)
+
+
+class ProseFlowTest(unittest.TestCase):
+    "The flow of nossaifd: the instruction, the hooks and the workflow, as its docs/flow.md installs them."
+    ASSETS = REPO / ".agents/skills/nossaifd/assets"
+
+    def test_the_parts_are_the_assets_of_the_nossaifd_skill(self):
+        for part, asset in ((".claude/settings.json", "claude-settings-hook.json"),
+                            (".codex/hooks.json", "codex-hooks.json"),
+                            (".github/workflows/nossaifd-prose.yml", "prose-check.yml")):
+            self.assertEqual((REPO / part).read_text(), (self.ASSETS / asset).read_text(), part)
+        self.assertIn((self.ASSETS / "agents-prose.md").read_text(), (REPO / "AGENTS.md").read_text())
+        self.assertIn("@AGENTS.md", (REPO / "CLAUDE.md").read_text().split())
+
+    def test_the_hooks_find_the_gate_and_the_checker(self):
+        for name in ("scripts/prose_gate.py", "scripts/check.py", "SKILL.md", "references/GUIDE.md"):
+            self.assertTrue((REPO / ".agents/skills/nossaifd" / name).is_file(), name)
+        self.assertTrue((REPO / ".agents/skills/declaude/scripts/declaude_lint.py").is_file())
+        for part in (".claude/settings.json", ".codex/hooks.json"):
+            hooks = json.loads((REPO / part).read_text())["hooks"]
+            self.assertEqual(sorted(hooks), ["Stop", "UserPromptSubmit"], part)
+
+    def test_the_installed_skills_are_whole_and_locked(self):
+        for name in ("nossaifd", "declaude"):
+            self.assertTrue((REPO / ".agents/skills" / name / "SKILL.md").is_file(), name)
+        lock = json.loads((REPO / "skills-lock.json").read_text())
+        self.assertEqual(sorted(lock["skills"]), ["declaude", "nossaifd"])
+        self.assertEqual({v["source"] for v in lock["skills"].values()}, {"rahuldave/nossaifd"})
+
+    def test_the_readme_credits_the_declaude_skill_once(self):
+        text = " ".join((REPO / "README.md").read_text().split())
+        self.assertEqual(text.count("the skill `declaude`, by Oskar Austegard, under the MIT licence"), 1)
+        self.assertEqual(text.count("Oskar Austegard calls it declauding"), 1)
+
+    def test_the_recipes_of_the_flow(self):
+        justfile = (REPO / "Justfile").read_text()
+        for line in ("    git ls-files -z '*.md' ':!:.agents/skills/nossaifd/' ':!:.agents/skills/declaude/'"
+                     " | xargs -0 {{python}} -I {{check_py}}\n",
+                     "nossaifd-install:\n    npx -y skills add rahuldave/nossaifd -a codex --skill '*' -y\n",
+                     "prose-status:\n    {{python}} -I .agents/skills/nossaifd/scripts/prose_gate.py status\n",
+                     '[no-cd]\nprose-record +pages:\n    {{python}} -I "{{justfile_directory()}}/.agents/skills/'
+                     'nossaifd/scripts/prose_gate.py" record "$@"\n'):
+            self.assertIn(line, justfile)
+        check = justfile[justfile.index("\ncheck:"):]
+        self.assertIn("    just prose\n", check)
+
+    @unittest.skipUnless(shutil.which("just"), "needs just")
+    def test_just_prose_fails_on_a_hard_problem(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            shutil.copy(REPO / "Justfile", root / "Justfile")
+            shutil.copytree(REPO / ".agents/skills/nossaifd", root / ".agents/skills/nossaifd")
+            (root / "page.md").write_text("# A page\n\nIt's a page with a contraction.\n")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+            run = subprocess.run(["just", "prose"], cwd=root, capture_output=True, text=True)
+            self.assertNotEqual(run.returncode, 0, run.stdout + run.stderr)
+            self.assertIn("page.md: 1 hard", run.stdout)
+
+    def test_just_prose_uses_the_checker_of_the_skill_and_skips_the_installed_skills(self):
+        justfile = (REPO / "Justfile").read_text()
+        self.assertIn('check_py := ".agents/skills/nossaifd/scripts/check.py"', justfile)
+        recipe = justfile[justfile.index("\nprose:"):justfile.index("\nnossaifd-install:")]
+        self.assertIn("':!:.agents/skills/nossaifd/'", recipe)
+        self.assertIn("':!:.agents/skills/declaude/'", recipe)
+        self.assertIn("{{check_py}}", recipe)
 
 
 class GuideTest(unittest.TestCase):
@@ -121,6 +192,21 @@ class StandaloneTest(unittest.TestCase):
         imports = re.findall(r"(?m)^\s*(?:from ([\w.]+) import|import ([\w.]+))", source)
         self.assertEqual({a or b for a, b in imports}, {"html", "re", "sys", "pathlib"})
         self.assertIn("nossaifd-talks", source.split("def _strip_comments")[0])   # the credit for the scanner
+
+
+class GateTest(unittest.TestCase):
+    "The pages that the gate of nossaifd checks. These fail check.py on purpose: a script, a copy of a book or a test."
+    KNOWN = ["examples/cache/slides.qmd"]
+
+    def test_only_the_known_pages_fail_the_gate(self):
+        sys.path.insert(0, str(REPO / ".agents/skills/nossaifd/scripts"))
+        import prose_gate
+        names = subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True).stdout.split()
+        pages = [n for n in names if prose_gate.is_page(n)]
+        run = subprocess.run([sys.executable, "-I", str(REPO / ".agents/skills/nossaifd/scripts/check.py"), *pages],
+                             cwd=REPO, capture_output=True, text=True)
+        failing = sorted(re.findall(r"(?m)^(\S+): [1-9]\d* hard", run.stdout))
+        self.assertEqual(failing, sorted(self.KNOWN))
 
 
 if __name__ == "__main__":
