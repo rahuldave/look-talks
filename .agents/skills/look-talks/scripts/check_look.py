@@ -135,6 +135,22 @@ class Slide:
 NOTES = re.compile(r"^ {0,3}:{3,}[ \t]*(?:notes|\{[ \t]*\.notes[ \t]*\})[ \t]*$")
 
 
+def _visible(raw: str, open_: bool) -> str:
+    "The line outside HTML comments. A <!-- inside inline code, as in `<!--`, does not open a comment, as in htmpres."
+    masked = re.sub(r"(`+).*?\1", lambda m: "x" * len(m.group(0)), raw)
+    kept, cursor = [], 0
+    while cursor < len(masked):
+        marker = "-->" if open_ else "<!--"
+        index = masked.find(marker, cursor)
+        end = len(masked) if index < 0 else index
+        if not open_:
+            kept.append(raw[cursor:end])
+        if index < 0:
+            break
+        cursor, open_ = index + len(marker), not open_
+    return "".join(kept)
+
+
 def split(text: str) -> tuple[list[str], list[Slide]]:
     """The lines of the front matter and the slides of a deck, as htmpres's slideSegments splits them.
 
@@ -180,19 +196,22 @@ def split(text: str) -> tuple[list[str], list[Slide]]:
                 continue
             current = Slide(1, number, "", "")
             slides.append(current)
-        if notes_depth >= 0:
-            if re.match(r"^ {0,3}:{3,}[ \t]*$", raw) and line["depth"] == notes_depth + 1:
+        in_notes = notes_depth >= 0
+        if in_notes:
+            if (re.match(r"^ {0,3}:{3,}[ \t]*$", raw) and kind == "body" and not line["in_comment"]
+                    and line["depth"] == notes_depth + 1):
                 notes_depth = -1
-            else:
-                current.script.append((number, raw))
-                if kind == "body":
-                    visible = _strip_comments(raw, line["in_comment"])[0] if "<!--" in raw or line["in_comment"] else raw
-                    current.script_text.append((number, visible))
-            continue
-        if kind == "body" and not line["in_comment"] and NOTES.match(raw):
+                continue
+            current.script.append((number, raw))   # then read as the body is read: code, raw HTML and text
+        if not in_notes and kind == "body" and not line["in_comment"] and NOTES.match(raw):
             notes_depth, current.notes = line["depth"], True
             continue
         if kind == "code":
+            if tag:
+                current.html.append((number, raw))
+                if re.search(rf"</{tag}\s*>", raw, re.I):
+                    tag = ""
+                continue
             if fence:
                 closing = re.match(r"^ {0,3}(`+|~+)[ \t]*$", raw)
                 if closing and closing.group(1)[0] == fence[0] and len(closing.group(1)) >= len(fence):
@@ -213,8 +232,8 @@ def split(text: str) -> tuple[list[str], list[Slide]]:
                     tag = ""
             # an indented code block is content, and is left alone
         elif kind == "body":
-            visible = _strip_comments(raw, line["in_comment"])[0] if "<!--" in raw or line["in_comment"] else raw
-            current.body.append((number, visible))
+            visible = _visible(raw, line["in_comment"]) if "<!--" in raw or line["in_comment"] else raw
+            (current.script_text if in_notes else current.body).append((number, visible))
     return matter, slides
 
 
@@ -350,13 +369,15 @@ def value_problems(text: str) -> list[str]:
 def check_values(slides: list[Slide], hard: list[str]) -> None:
     """Hard: no value of the look in the slides, by rule 4.
 
-    The check reads the title line, the body, the notes, raw HTML and the attributes of code fences. The lines of a
-    code block that shows code are content, and so are inline code and math."""
+    The check reads the title line, the body, the notes, raw HTML and the attributes of code fences, in the slide
+    and in its notes. The lines of a code block that shows code are content, and so are inline code, math and
+    comments, in the notes too."""
     for slide in slides:
         body = math_blanked("\n".join(text for _, text in slide.body)).split("\n") if slide.body else []
         lines = [(slide.line, slide.attrs)] + [(n, t) for (n, _), t in zip(slide.body, body)]
         lines += slide.html + slide.fences
-        lines += [(n, math_blanked(t)) for n, t in slide.script]
+        notes = math_blanked("\n".join(text for _, text in slide.script_text)).split("\n") if slide.script_text else []
+        lines += [(n, t) for (n, _), t in zip(slide.script_text, notes)]
         for line, text in lines:
             for problem in value_problems(text):
                 hard.append(f"{slide.where(line)}: {problem}, by rule 4")
