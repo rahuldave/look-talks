@@ -86,10 +86,11 @@ nossaifd-install:
     npx -y skills add rahuldave/nossaifd -a codex --skill '*' -y
     npx -y skills add rahuldave/nossaifd-talks -a codex --skill presentations -y
 
-# Check pages with the checker that .agents/nossaifd-checkers.json gives each one. A path is from the current folder
+# Check the pages that changed since HEAD, each with the checker that .agents/nossaifd-checkers.json gives it.
+# With names of pages, from the current folder, check those pages only. -v also shows the soft notes
 [no-cd]
-prose-check +pages:
-    {{python}} -I "{{justfile_directory()}}/{{gate_py}}" check -v "$@"
+prose-check *args:
+    {{python}} -I "{{justfile_directory()}}/.agents/skills/nossaifd/scripts/prose_gate.py" check-changed "$@"
 
 # List the changed pages that still need the steps of the nossaifd skill
 prose-status:

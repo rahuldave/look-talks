@@ -1,5 +1,6 @@
 """Check the skill package, the copies that the skill ships, and the promises of the guide."""
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -117,7 +118,7 @@ class ProseFlowTest(unittest.TestCase):
                      'gate_py := ".agents/skills/nossaifd/scripts/prose_gate.py"\n',
                      "nossaifd-install:\n    npx -y skills add rahuldave/nossaifd -a codex --skill '*' -y\n"
                      "    npx -y skills add rahuldave/nossaifd-talks -a codex --skill presentations -y\n",
-                     '[no-cd]\nprose-check +pages:\n    {{python}} -I "{{justfile_directory()}}/{{gate_py}}" check -v "$@"\n',
+                     '[no-cd]\nprose-check *args:\n    {{python}} -I "{{justfile_directory()}}/.agents/skills/nossaifd/scripts/prose_gate.py" check-changed "$@"\n',
                      "prose-status:\n    {{python}} -I .agents/skills/nossaifd/scripts/prose_gate.py status\n",
                      '[no-cd]\nprose-record +pages:\n    {{python}} -I "{{justfile_directory()}}/.agents/skills/'
                      'nossaifd/scripts/prose_gate.py" record "$@"\n'):
@@ -163,7 +164,7 @@ class ProseFlowTest(unittest.TestCase):
     def test_just_prose_checks_through_the_map_and_checks_our_skill(self):
         justfile = (REPO / "Justfile").read_text()
         self.assertIn('check_py := ".agents/skills/nossaifd/scripts/check.py"', justfile)
-        recipe = justfile[justfile.index("\nprose:"):justfile.index("\n# Check pages with the checker")]
+        recipe = justfile[justfile.index("\nprose:"):justfile.index("\n# Check the pages that changed")]
         self.assertIn("{{gate_py}} pages -z", recipe)
         self.assertIn("{{gate_py}} check", recipe)
         self.assertIn("{{check_py}} .agents/skills/look-talks/SKILL.md AGENTS.md", recipe)
@@ -227,6 +228,49 @@ class StandaloneTest(unittest.TestCase):
         imports = re.findall(r"(?m)^\s*(?:from ([\w.]+) import|import ([\w.]+))", source)
         self.assertEqual({a or b for a, b in imports}, {"html", "re", "sys", "pathlib"})
         self.assertIn("nossaifd-talks", source.split("def _strip_comments")[0])   # the credit for the scanner
+
+
+class ProseCheckTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("just"), "needs just")
+    def test_prose_check_with_no_page_checks_the_changed_pages(self):
+        "With no page, just prose-check checks each page changed since HEAD, through the map."
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            shutil.copy(REPO / "Justfile", root / "Justfile")
+            shutil.copytree(REPO / ".agents", root / ".agents")
+            deck = (REPO / "examples/cache/slides.qmd").read_text(encoding="utf-8")
+            (root / "talk").mkdir()
+            (root / "talk/slides.qmd").write_text(deck, encoding="utf-8")
+            shutil.copy(REPO / "examples/cache/plan.md", root / "talk/plan.md")
+            (root / "page.md").write_text("# A page\n\nA plain page.\n", encoding="utf-8")
+            git = dict(cwd=root, check=True, capture_output=True)
+            subprocess.run(["git", "init", "-q"], **git)
+            subprocess.run(["git", "add", "-A"], **git)
+            subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], **git)
+            # GitHub Actions sets CI, which makes check-changed compare with a base. This test is about a local run
+            local = {k: v for k, v in os.environ.items() if k != "CI" and not k.startswith("GITHUB_")}
+
+            def run(*args, env=local):
+                return subprocess.run(["just", "prose-check", *args], cwd=root, capture_output=True, text=True, env=env)
+            same = run()
+            self.assertEqual(same.returncode, 0, same.stdout + same.stderr)
+            self.assertIn("no page changed", same.stdout + same.stderr)
+            (root / "talk/slides.qmd").write_text(deck + "\n", encoding="utf-8")
+            (root / "page.md").write_text("# A page\n\nIt's a page with a contraction.\n", encoding="utf-8")
+            changed = run()
+            self.assertEqual(changed.returncode, 1, changed.stdout + changed.stderr)
+            self.assertIn("talk/slides.qmd: checked by .agents/skills/presentations/scripts/check_talk.py, 0 hard", changed.stdout)
+            self.assertIn("page.md: checked by check.py of the skill, 1 hard", changed.stdout)
+            one = run("talk/slides.qmd")
+            self.assertEqual(one.returncode, 0, one.stdout + one.stderr)
+            self.assertNotIn("page.md", one.stdout)
+            # In CI, with a base, it checks the pages that HEAD changed since the base
+            base = subprocess.run(["git", "rev-parse", "HEAD"], **git).stdout.decode().strip()
+            subprocess.run(["git", "add", "-A"], **git)
+            subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "change"], **git)
+            ci = run("--base", base, env=dict(local, CI="true"))
+            self.assertEqual(ci.returncode, 1, ci.stdout + ci.stderr)
+            self.assertIn("page.md: checked by check.py of the skill, 1 hard", ci.stdout)
 
 
 class GateTest(unittest.TestCase):

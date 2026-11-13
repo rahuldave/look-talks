@@ -27,13 +27,15 @@ decides. The gates are installed when .agents/stack.json turns on the tasker rol
 steps by hand give a page pass, but not the `prose` record that a commit needs.
 
 `prose_gate.py pages [-z] [PATH...]` prints each path that is a page. is_page is the one rule for pages: the
-step prose-check and the `@pages` of the commit gate use it through this command.
+`@pages` of the commit gate uses it through this command, and check-changed, the step prose-check, calls it.
 
 The map of checkers, the file .agents/nossaifd-checkers.json in the root of the project, can name another
 checker for some pages, for example the talk checker for a deck. `pages` decides what is a page, and the map
 decides how a page is checked. Every command that checks a page uses the map: hook, status, record,
-check-diff and `prose_gate.py check [-v] PAGE...`. A missing or failing checker, or a broken map, is a hard
-problem of the page. Each message names the checker of each page. See map_rules for the format.
+check-diff, `prose_gate.py check [-v] PAGE...` and `prose_gate.py check-changed [-v] [--base REF] [PAGE...]`.
+check-changed checks the pages that changed since HEAD, for the step prose-check of `just check`. In CI, or with
+--base, it checks the pages that HEAD changed since a base, as check-diff does. A missing or failing checker,
+or a broken map, is a hard problem of the page. Each message names the checker of each page. See map_rules for the format.
 
 The hook fails open: an error never blocks. Claude Code and Codex set stop_hook_active when the agent tries
 to stop again after a block, and the hook then lets it stop, so it cannot loop. The environment variable
@@ -64,7 +66,8 @@ DEFAULT = 'check.py of the skill'     # the checker of a page that no glob of th
 TIMEOUT = 30                          # the most seconds that a checker of the map may take for one page
 BUDGET = 40                           # the most seconds of the Stop hook for all its checkers. The hook has 60
 HARD_LINE = re.compile(r'^\s*HARD(?::|\s|$)[\s:]*(.*)$')   # a line of a checker that names a hard problem
-GRACE = 2                             # the seconds that the gate waits for the output after it stops a checker
+INSTALL = "npx skills add rahuldave/nossaifd -a codex --skill '*' -y"   # the install line of the README
+GRACE = 2                            # the seconds that the gate waits for the output after it stops a checker
 
 
 def is_page(rel):
@@ -165,7 +168,10 @@ class Checkers:
         if self.broken:
             return [f'the map of checkers {MAP} is broken: {self.broken}'], ''
         if name == DEFAULT:
-            self.check = self.check or checker()
+            try:
+                self.check = self.check or checker()
+            except MissingCheck as error:
+                return [str(error)], ''
             return problems(self.root / rel if self.root else Path(rel), self.check), ''
         timeout = TIMEOUT
         if self.deadline is not None:
@@ -183,7 +189,8 @@ def run_checker(root, name, rel, verbose=False, timeout=TIMEOUT):
     failure of the checker. Give back the hard problems and the output."""
     program = root / name
     if not program.is_file():
-        return [f'its checker {name}, which the map {MAP} names, is missing'], ''
+        return [f'its checker {name}, which the map {MAP} names, is missing. Install the skill that ships it '
+                'again, or fix the map'], ''
     page = rel if not rel.startswith('-') else f'./{rel}'
     try:
         # its own session, so that a timeout kills the checker and every process that it started
@@ -233,8 +240,20 @@ def gates_installed(root):
     return isinstance(choices, dict) and choices.get('tasker') is True
 
 
+class MissingCheck(Exception):
+    "check.py of the skill is missing. The message gives the install line."
+
+
+def missing_check():
+    "The message for a missing check.py of the skill, with the install line of the README."
+    return (f'check.py of the nossaifd skill is missing from {HERE}. Install the skill again: {INSTALL}, '
+            'or run `just install prose` in a project that jnterfaces set up')
+
+
 def checker():
-    "The check module next to this script."
+    "The check module next to this script. MissingCheck, with the install line, when check.py is missing."
+    if not (HERE / 'check.py').is_file():
+        raise MissingCheck(missing_check())
     spec = importlib.util.spec_from_file_location('nossaifd_check', HERE / 'check.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -439,6 +458,10 @@ def hook(project=None):
     try:
         message = None
         data, root = hook_input(project)
+        if root is not None and not (HERE / 'check.py').is_file():
+            # a broken install is no fault of the turn: say how to install, and let the stop go through
+            print(f'nossaifd: {missing_check()}', file=sys.stderr)
+            root = None
         if root is not None:
             path = snapshot_file(root, data.get('session_id'))
             before = read(path)
@@ -507,16 +530,31 @@ def status():
     return 1 if message else 0
 
 
+def diff_pages(root, *revs):
+    """The pages that git diff names between revs as added, changed or of a changed type, with no rename, relative
+    to the root: the one listing of check-diff and of check-changed with a base. A deleted page is not listed.
+    The pair (pages, None), or (None, the message of git) when git fails."""
+    out = git(root, 'diff', '-z', '--name-only', '--no-renames', '--diff-filter=AMT', *revs, '--')
+    if out.returncode:
+        return None, out.stderr.strip()
+    return [p for p in filter(None, out.stdout.split('\0')) if is_page(p)], None
+
+
 def check_diff(base):
     """For a workflow: run the checker of each page that HEAD adds or changes since base. Exit 1 on a hard
-    problem."""
+    problem. A branch or a commit counts from its merge base with HEAD. A tree, such as the empty tree for the
+    first push, has no merge base, so it is compared with HEAD directly."""
     root = git_root(Path.cwd())
-    out = git(root, 'diff', '-z', '--name-only', '--no-renames', '--diff-filter=AM', f'{base}...HEAD')
-    if out.returncode:
-        print(out.stderr, file=sys.stderr)
+    if root is None or base.startswith('-'):
+        print('prose_gate.py check-diff: run it in a git repository, with a base that does not start with -',
+              file=sys.stderr)
+        return 2
+    tree = git(root, 'cat-file', '-t', base).stdout.strip() == 'tree'
+    rels, error = diff_pages(root, *((base, 'HEAD') if tree else (f'{base}...HEAD',)))
+    if rels is None:
+        print(error, file=sys.stderr)
         return 2
     checkers, status = Checkers(root), 0
-    rels = [p for p in filter(None, out.stdout.split('\0')) if is_page(p)]
     for rel in rels:
         by = checkers.name(rel)
         hard = checkers.problems(rel)[0]
@@ -544,16 +582,24 @@ def check_pages(args):
     if not args:
         print('prose_gate.py check: name at least one page', file=sys.stderr)
         return 2
-    root = git_root(Path.cwd())
+    return check_named(git_root(Path.cwd()), args, verbose)
+
+
+def check_named(root, names, verbose, changed=False):
+    """The loop of check and check-changed. With changed, each name is the path of a page from the root, as git
+    prints it; otherwise a name is relative to the folder of the call or to the root."""
     checkers, status = Checkers(root), 0
-    for name in args:
-        path = resolve(name, root) if root else Path(name).resolve()
-        rel, inside = name, False
-        if root:
-            try:
-                rel, inside = path.relative_to(root.resolve()).as_posix(), True
-            except ValueError:
-                pass
+    for name in names:
+        if changed:
+            path, rel, inside = root / name, name, True
+        else:
+            path = resolve(name, root) if root else Path(name).resolve()
+            rel, inside = name, False
+            if root:
+                try:
+                    rel, inside = path.relative_to(root.resolve()).as_posix(), True
+                except ValueError:
+                    pass
         if not path.is_file():
             print(f'{name}: not checked, there is no such file', file=sys.stderr)
             status = 2
@@ -561,9 +607,11 @@ def check_pages(args):
         # the map is of the pages of the project, so a file outside it, such as a draft in /tmp, gets check.py
         by = checkers.name(rel) if inside else DEFAULT
         if by == DEFAULT:
-            checkers.check = checkers.check or checker()
             try:
+                checkers.check = checkers.check or checker()
                 hard, soft = checkers.check.check(path)
+            except MissingCheck as error:
+                hard, soft = [str(error)], []
             except (OSError, UnicodeDecodeError) as error:
                 hard, soft = [f'the page cannot be read: {error}'], []
             print(f'{rel}: checked by {by}, {len(hard)} hard, {len(soft)} soft')
@@ -576,6 +624,276 @@ def check_pages(args):
             print(''.join(f'  HARD {p}\n' for p in hard if p not in output), end='')
         if hard and status == 0:
             status = 1
+    return status
+
+
+def empty_tree(root):
+    "The id of the empty tree, in the hash format of this repository, or None when git fails. It writes nothing."
+    out = git(root, 'hash-object', '-t', 'tree', '--stdin', stdin='')
+    if out.returncode:
+        print(out.stderr.strip(), file=sys.stderr)
+        return None
+    return out.stdout.strip()
+
+
+def ci_set():
+    """Whether the environment variable CI is set. GitHub sets it to true. Empty, false and 0, in any case and with
+    spaces around, count as not set, so CI=false turns the CI mode off."""
+    return os.environ.get('CI', '').strip().lower() not in ('', 'false', '0')
+
+
+FETCH = ('Fetch the whole history: set fetch-depth: 0 on actions/checkout, or run git fetch --unshallow, '
+         'and fetch the base branch.')
+BRANCH = re.compile(r'[^-\s~^:?*\[\\][^\s~^:?*\[\\]*')   # a name of a branch that git can take as origin/NAME
+
+
+def default_branch(root):
+    """The default branch of the repository, for CI: the key repository.default_branch of the event file of
+    GitHub at GITHUB_EVENT_PATH, or else the branch of origin/HEAD. None when neither gives a branch."""
+    try:
+        event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'))
+        branch = event['repository']['default_branch']
+        if isinstance(branch, str) and BRANCH.fullmatch(branch):
+            return branch
+    except (KeyError, OSError, ValueError, TypeError):
+        pass
+    out = git(root, 'symbolic-ref', '-q', 'refs/remotes/origin/HEAD')
+    name = out.stdout.strip().removeprefix('refs/remotes/origin/')
+    return name if out.returncode == 0 and name and BRANCH.fullmatch(name) else None
+
+
+def pushed_before():
+    """The commit before a push on GitHub, the key before of the event file at GITHUB_EVENT_PATH, and None. All
+    zeros, as for the push that makes a branch, comes back as it is: base_commit compares the empty tree with
+    HEAD then. Or None and the reason when there is no such commit: no file or key, or a value that is not the
+    id of a commit."""
+    try:
+        before = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'))['before']
+    except (KeyError, OSError, ValueError, TypeError):
+        return None, 'the event file at GITHUB_EVENT_PATH gives no commit before a push'
+    if not isinstance(before, str) or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', before):
+        return None, 'the key before of the event file is not the id of a commit'
+    return before, None
+
+
+def parent_or_empty(root, why):
+    "HEAD^ and its name, or the empty tree when HEAD is the first commit, or None and the message of the error."
+    parents = git(root, 'rev-list', '--parents', '-n1', 'HEAD')
+    if parents.returncode:
+        return None, parents.stderr.strip() or 'git cannot read the parents of HEAD.'
+    parents = parents.stdout.split()[1:]
+    if parents:
+        return parents[0], f'HEAD^, the parent commit, {why}'
+    tree = empty_tree(root)
+    if tree is None:
+        return None, 'git cannot make the empty tree.'
+    return tree, f'the empty tree, as HEAD is the first commit, {why}'
+
+
+def merge_base(root, ref, name, hint=''):
+    "The merge base of ref and HEAD, and the name of the base, or None and the message of the error."
+    if ref.startswith('-'):
+        return None, f'the base {name} cannot start with -.'
+    found = git(root, 'rev-parse', '--verify', '-q', f'{ref}^{{commit}}')
+    if found.returncode:
+        return None, f'the base {name} does not resolve to a commit.{hint}'
+    merge = git(root, 'merge-base', found.stdout.strip(), 'HEAD')
+    if merge.returncode or not merge.stdout.strip():
+        return None, (f'{name} and HEAD have no merge base, so there is no change of HEAD to compare. '
+                      'Rebase on the base, or name the pages.')
+    return merge.stdout.split()[0], f'the merge base of {name} and HEAD'
+
+
+def base_commit(root, option):
+    """The commit to compare HEAD with, for check-changed with a base, and the name of the base for the message.
+    The pair (commit, name), or (None, the message of the error). The base is a merge base, so the check never
+    takes in the pages of commits that only the other side has.
+
+    - The option --base REF gives the merge base of REF and HEAD. It wins over CI.
+    - On a pull request, with a nonempty GITHUB_BASE_REF, it is the merge base of origin/GITHUB_BASE_REF and HEAD.
+    - On a push to the default branch, GITHUB_REF=refs/heads/DEFAULT, it is the commit before the push, the key
+      before of the event file (see pushed_before), so each commit of the push is checked. A commit can skip the
+      commit gate with --no-verify. When before is all zeros, as when the push makes the branch, the base is
+      the empty tree, so each page of HEAD is checked. When before is missing, not in the history or not an
+      ancestor of HEAD, as after a force-push, the base is HEAD^. A line of the output names either fallback.
+    - On another push, a merge queue or another CI system, it is the merge base of origin/DEFAULT and HEAD, so
+      each commit of a branch is checked, also after a force-push. When that merge base is HEAD itself, HEAD is
+      on the default branch, so the base is HEAD^, as for a push to the default branch.
+    - The default branch DEFAULT comes from the event file of GitHub, or else from origin/HEAD (default_branch).
+    - When the base would be HEAD^ and HEAD has no parent, the base is the empty tree.
+
+    Each error gives exit 2, never a check of no page: the event pull_request_target, which checks out the base
+    branch; a shallow clone, also with the option, because its history is cut off and a cut-off commit looks
+    like a first commit; no default branch; a base that does not resolve to a commit; and no merge base."""
+    if head(root) is None:
+        return None, 'HEAD has no commit, so there is no history to compare with a base.'
+    if option is None and os.environ.get('GITHUB_EVENT_NAME') == 'pull_request_target':
+        return None, ('the event pull_request_target checks out the base branch, so there is no change to '
+                      'check. Run the workflow on the event pull_request.')
+    shallow = git(root, 'rev-parse', '--is-shallow-repository')
+    if shallow.returncode or shallow.stdout.strip() != 'false':
+        return None, f'this clone is shallow, so its history is cut off and the base cannot be trusted. {FETCH}'
+    if option is not None:
+        return merge_base(root, option, option)
+    if os.environ.get('GITHUB_BASE_REF'):
+        branch = os.environ['GITHUB_BASE_REF']
+        return merge_base(root, f'refs/remotes/origin/{branch}', f'origin/{branch}', f' {FETCH}')
+    branch = default_branch(root)
+    if branch is None:
+        return None, ('no default branch: the event file at GITHUB_EVENT_PATH has no repository.default_branch, '
+                      'and origin/HEAD is not set. Run git remote set-head origin --auto, or give --base REF.')
+    if os.environ.get('GITHUB_REF') == f'refs/heads/{branch}':
+        before, why = pushed_before()
+        if before and not before.strip('0'):
+            tree = empty_tree(root)
+            if tree is None:
+                return None, 'git cannot make the empty tree.'
+            print('nossaifd: the base is the empty tree, because the key before of the event file is all zeros, as '
+                  'when the push makes the branch, so each page of HEAD is checked.')
+            return tree, f'the empty tree, as the key before of the push to the default branch {branch} is all zeros'
+        if before and git(root, 'merge-base', '--is-ancestor', before, 'HEAD').returncode == 0:
+            return before, f'{before[:12]}, the commit before the push to the default branch {branch}'
+        if before:
+            why = f'the commit before the push, {before[:12]}, is not an ancestor of HEAD, as after a force-push'
+        commit, name = parent_or_empty(root, f'for a push to the default branch {branch}')
+        if commit is not None:
+            # the line names the base that parent_or_empty chose: HEAD^, or the empty tree for a first commit
+            print(f'nossaifd: the base is {"HEAD^" if name.startswith("HEAD^") else "the empty tree"}, because '
+                  f'{why}.')
+        return commit, name
+    commit, name = merge_base(root, f'refs/remotes/origin/{branch}', f'origin/{branch}', f' {FETCH}')
+    if commit is not None and commit == head(root):
+        return parent_or_empty(root, f'as HEAD has no commit of its own beside the default branch origin/{branch}')
+    return commit, name
+
+
+
+
+def changed_pages(root):
+    """The pages that changed since HEAD and are on disk, relative to the root: each page that git diff reports as
+    added, changed or of a changed type, such as a link that became a file, with no rename, and each new file that
+    git does not ignore. Before the first commit, every
+    page of the index counts as added. None when git fails."""
+    base = head(root)
+    if base is None:
+        base = empty_tree(root)         # no commit yet
+        if base is None:
+            return None
+    diff = git(root, 'diff', '-z', '--name-only', '--no-renames', '--diff-filter=AMT', base, '--')
+    new = git(root, 'ls-files', '-z', '--others', '--exclude-standard')
+    if diff.returncode or new.returncode:
+        print((diff.stderr or new.stderr).strip(), file=sys.stderr)
+        return None
+    paths = set(filter(None, diff.stdout.split('\0'))) | set(filter(None, new.stdout.split('\0')))
+    # a file that git reports, but that is gone, a folder or a link to nowhere, is not a page to check
+    return sorted(p for p in paths if is_page(p) and (root / p).is_file())
+
+
+def check_changed(args):
+    """The step prose-check of `just check`. With names of pages, check those pages only, as check does. With none,
+    check each page that changed since HEAD, by the map of checkers. -v adds the soft notes. Exit 0 when no page
+    has a hard problem, also when no page changed, 1 when one has, and 2 outside a git repository, on a git
+    error, on a missing named page or on an unknown option. -v may come before or after a page, as for check.py.
+    A page whose name starts with - comes after --. It writes nothing: no record and no snapshot.
+
+    With a base, it checks the pages as check-diff does: each page that HEAD adds or changes since the base, by
+    the map of checkers, as the file is on disk, and also each page that changed since HEAD (see check_since). A
+    base comes from the option --base REF, or --base=REF, or from the environment variable CI (see ci_set and
+    base_commit). GitHub sets CI=true, and GITHUB_BASE_REF on a pull request. So in CI the step checks the pages
+    of the pull request, of the branch or of the push. The option wins over CI, and runs the same check outside
+    CI. With names of pages, CI changes nothing, and the option is an error. The last line names the base, for
+    example "compared with the merge base of origin/main and HEAD". An error of the base gives exit 2, never a
+    pass with no page checked."""
+    options, names, base, i = [], [], None, 0
+    while i < len(args):
+        arg = args[i]
+        i += 1
+        if arg == '--':
+            names += args[i:]
+            break
+        if arg == '-v':
+            options = ['-v']
+        elif arg == '--base' or arg.startswith('--base='):
+            if arg == '--base':
+                if i == len(args):
+                    print('prose_gate.py check-changed: --base needs a branch or a commit', file=sys.stderr)
+                    return 2
+                arg, i = args[i], i + 1
+            else:
+                arg = arg.removeprefix('--base=')
+            if not arg:
+                print('prose_gate.py check-changed: --base needs a branch or a commit', file=sys.stderr)
+                return 2
+            base = arg
+        elif arg.startswith('-'):
+            print(f'prose_gate.py check-changed: unknown option {arg}. Put a page whose name starts with - '
+                  'after --', file=sys.stderr)
+            return 2
+        else:
+            names.append(arg)
+    if names and base is not None:
+        print('prose_gate.py check-changed: --base checks the pages of the diff, so name no page with it',
+              file=sys.stderr)
+        return 2
+    if names:
+        return check_pages([*options, '--', *names])
+    root = git_root(Path.cwd())
+    if root is None:
+        print('prose_gate.py check-changed: this folder is not in a git repository, so name the pages: '
+              'just prose-check README.md', file=sys.stderr)
+        return 2
+    if base is not None or ci_set():
+        return check_since(root, base, bool(options))
+    rels = changed_pages(root)
+    if rels is None:
+        print('prose_gate.py check-changed: git cannot list the changed files', file=sys.stderr)
+        return 2
+    if not rels:
+        print('nossaifd: no page changed since HEAD, so there is no page to check.')
+        return 0
+    status = check_named(root, rels, bool(options), changed=True)
+    result = {0: 'no hard problem', 1: 'a hard problem'}.get(status, 'a page that is gone')
+    print(f'nossaifd: checked {len(rels)} changed page(s), {result}.')
+    return status
+
+
+def check_since(root, option, verbose):
+    """check-changed with a base: check each page that HEAD adds or changes since the base, with the listing of
+    check-diff, and each page that changed since HEAD, untracked pages too, with the loop of check. Each page
+    counts once. In a clean checkout the second set is empty. A page of the commits that the working tree
+    deleted is named and not checked. Any other page of the commits that is not a file on disk, as in a sparse
+    checkout or for a link to nowhere, gives exit 2, so that a page is never skipped in silence. Without a base,
+    changed_pages drops such a page, because there it is a change of the working tree, not of a commit."""
+    commit, name = base_commit(root, option)
+    if commit is None:
+        print(f'prose_gate.py check-changed: {name}', file=sys.stderr)
+        return 2
+    rels, error = diff_pages(root, commit, 'HEAD')
+    deleted = git(root, 'diff', '-z', '--name-only', '--no-renames', '--diff-filter=D', 'HEAD', '--')
+    local = changed_pages(root)
+    if rels is None or deleted.returncode or local is None:
+        print(f'prose_gate.py check-changed: git cannot list the changed files: {error or deleted.stderr.strip()}',
+              file=sys.stderr)
+        return 2
+    deleted = set(filter(None, deleted.stdout.split('\0'))) - set(local)   # git rm --cached leaves the file
+    for rel in rels:
+        if rel in deleted:
+            print(f'{rel}: not checked, it is deleted since HEAD')
+    missing = [rel for rel in rels if rel not in deleted and not (root / rel).is_file()]
+    if missing:
+        print(f'prose_gate.py check-changed: {len(missing)} changed page(s) are not files on disk, so they cannot '
+              'be checked: ' + ', '.join(missing) + '. A sparse checkout, a skip-worktree flag or a link to '
+              'nowhere leaves a page off the disk. Check out the whole tree, or fix or remove the link.',
+              file=sys.stderr)
+        return 2
+    # each page once: the pages of the commits since the base, and the pages of the next commit
+    rels = sorted({rel for rel in rels if rel not in deleted} | set(local))
+    if not rels:
+        print(f'nossaifd: no page changed, compared with {name}, so there is no page to check.')
+        return 0
+    status = check_named(root, rels, verbose, changed=True)
+    result = {0: 'no hard problem', 1: 'a hard problem'}.get(status, 'a page that is gone')
+    print(f'nossaifd: checked {len(rels)} changed page(s), compared with {name}, {result}.')
     return status
 
 
@@ -646,9 +964,11 @@ def main(argv):
         return pages(argv[2:])
     if command == ['check']:
         return check_pages(argv[2:])
+    if command == ['check-changed']:
+        return check_changed(argv[2:])
     print(__doc__)
     print('Usage: prose_gate.py hook [ROOT] | start [ROOT] | record PAGE... | status | check-diff BASE'
-          ' | pages [-z] [PATH...] | check [-v] PAGE...', file=sys.stderr)
+          ' | pages [-z] [PATH...] | check [-v] PAGE... | check-changed [-v] [--base REF] [PAGE...]', file=sys.stderr)
     return 2
 
 
