@@ -272,6 +272,25 @@ class ProseCheckTest(unittest.TestCase):
             self.assertEqual(ci.returncode, 1, ci.stdout + ci.stderr)
             self.assertIn("page.md: checked by check.py of the skill, 1 hard", ci.stdout)
 
+    @unittest.skipUnless(shutil.which("just"), "needs just")
+    def test_prose_check_shows_the_soft_notes_with_v_as_the_readme_says(self):
+        readme = " ".join((REPO / "README.md").read_text(encoding="utf-8").split())
+        self.assertIn("Add `-v` to also see the soft notes.", readme)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            shutil.copy(REPO / "Justfile", root / "Justfile")
+            shutil.copytree(REPO / ".agents", root / ".agents")
+            (root / "page.md").write_text("# A page\n\nHowever, the page is plain.\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+
+            def run(*args):
+                return subprocess.run(["just", "prose-check", *args, "page.md"], cwd=root,
+                                      capture_output=True, text=True)
+            quiet, loud = run(), run("-v")
+        self.assertEqual((quiet.returncode, loud.returncode), (0, 0), quiet.stdout + loud.stdout + loud.stderr)
+        self.assertIn("0 hard, 1 soft", quiet.stdout)
+        self.assertNotIn("  soft ", quiet.stdout)
+        self.assertIn("  soft ", loud.stdout)
 
 class GateTest(unittest.TestCase):
     "The pages that the gate of nossaifd checks, each through the map of checkers. No page fails."
