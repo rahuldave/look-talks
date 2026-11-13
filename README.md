@@ -88,7 +88,7 @@ skill. The package installs only `look-talks`, and not these three skills.
 After the passes, `just prose-record page.md` records a page, and `just prose-status` lists the pages that
 still need them. `just prose-check` checks each page with the checker that the map names for it. With no page
 name, it checks each page that changed since the last commit, and `just prose-check page.md` checks only that
-page. `just nossaifd-install` installs the three skills again.
+page. Add `-v` to also see the soft notes. `just nossaifd-install` installs the three skills again.
 
 ## Licence
 
