@@ -89,11 +89,17 @@ guide says.
    the checker and have a record. It asks once for the steps that remain. If a page is not
    prose for a person, do not record it, and tell the user so.
 
-   A project with the commit gates of agent_gest_git_skills turns on the tasker role in
-   `.agents/stack.json`. In such a project, run `just prose` in place of steps 6 to 8. It gives the
-   pages to a fresh agent, which is an agent that the harness starts for one task. The fresh agent does
-   those steps and records each page. A commit needs the `prose` record of `just prose`, and the steps
-   by hand do not give it.
+   Run `just prose` in place of steps 6 to 8 only when `.agents/stack.json` sets
+   `choices.tasker` to the JSON value `true`, not the string `"true"`. That setting turns on the
+   commit gates of agent_gest_git_skills. Then `just prose` gives the pages to a fresh agent, which is
+   an agent that the harness starts for one task. The fresh agent does those steps and records each
+   page. A commit needs the `prose` record of `just prose`, and the steps by hand do not give it.
+
+   Otherwise, do steps 6 to 8 yourself. Do them yourself also when the project has no recipe
+   `just prose`, or when it only runs the checkers.
+
+   `just prose-check` only runs the checkers. It does not do the declaude pass or the record, so it
+   never replaces steps 6 to 8.
 9. Read the page yourself. The checker cannot judge meaning, tone or a missing
    definition.
 
