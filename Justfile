@@ -7,10 +7,12 @@ set positional-arguments
 python := "uv run --no-project --quiet python"
 smalldocs := "uvx --from smalldocs==0.5.5 smalldocs"
 
-# The skills nossaifd and declaude, from github.com/rahuldave/nossaifd, live in .agents/skills/ for the prose flow
-# of nossaifd. The declaude skill is by Oskar Austegard (github.com/oaustegard/claude-skills, MIT licence).
-# The package ships only look-talks. The checker for prose is the check.py of the nossaifd skill.
+# The skills nossaifd and declaude, from github.com/rahuldave/nossaifd, and presentations, from
+# github.com/rahuldave/nossaifd-talks, live in .agents/skills/ for the prose flow of nossaifd. The declaude skill
+# is by Oskar Austegard (github.com/oaustegard/claude-skills, MIT licence). The package ships only look-talks.
+# The map .agents/nossaifd-checkers.json gives the talks to check_talk.py of presentations, and other pages to check.py.
 check_py := ".agents/skills/nossaifd/scripts/check.py"
+gate_py := ".agents/skills/nossaifd/scripts/prose_gate.py"
 # htmpres for just example, at a fixed commit of its main branch: PR 30, which fails a picture with no
 # description and fits a picture under a title in the rest of the slide.
 htmpres_commit := "0787d97961c938aece8e6d58639ec1ed3ea79f87"
@@ -71,13 +73,23 @@ package-lint:
     git -C "$tool_root/package-maker" checkout --quiet 6a5938c49ca71c374dc1a234a4d15134c484a741
     {{python}} "$tool_root/package-maker/skills/skill-package-maker/scripts/lint_skill_bundle.py" .
 
-# Check the Markdown pages with check.py of nossaifd. The skills of nossaifd are its pages, not ours
+# Check each page with the checker that .agents/nossaifd-checkers.json gives it: talks get check_talk.py, others check.py.
+# The gate skips .agents/ and AGENTS.md, so the SKILL.md of look-talks and AGENTS.md get check.py by name
 prose:
-    git ls-files -z '*.md' ':!:.agents/skills/nossaifd/' ':!:.agents/skills/declaude/' | xargs -0 {{python}} -I {{check_py}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git ls-files -z '*.md' '*.qmd' | {{python}} -I {{gate_py}} pages -z | xargs -0 -r {{python}} -I {{gate_py}} check
+    {{python}} -I {{check_py}} .agents/skills/look-talks/SKILL.md AGENTS.md
 
-# Install the skills nossaifd and declaude again from the main branch of nossaifd, for the prose flow
+# Install the skills nossaifd and declaude from nossaifd, and presentations from nossaifd-talks, for the prose flow
 nossaifd-install:
     npx -y skills add rahuldave/nossaifd -a codex --skill '*' -y
+    npx -y skills add rahuldave/nossaifd-talks -a codex --skill presentations -y
+
+# Check pages with the checker that .agents/nossaifd-checkers.json gives each one. A path is from the current folder
+[no-cd]
+prose-check +pages:
+    {{python}} -I "{{justfile_directory()}}/{{gate_py}}" check -v "$@"
 
 # List the changed pages that still need the steps of the nossaifd skill
 prose-status:

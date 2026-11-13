@@ -27,8 +27,9 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(manifest["repository"]["name"], "look-talks")
         self.assertEqual(manifest["repository"]["url"], "https://github.com/rahuldave/look-talks")
         self.assertEqual(manifest["skills"], [{"name": "look-talks", "path": ".agents/skills/look-talks"}])
-        # The skills nossaifd and declaude are installed for the prose flow, and the package does not ship them
-        self.assertEqual(sorted(p.name for p in (REPO / ".agents/skills").iterdir()), ["declaude", "look-talks", "nossaifd"])
+        # The skills nossaifd, declaude and presentations are installed for the prose flow, and the package does not ship them
+        self.assertEqual(sorted(p.name for p in (REPO / ".agents/skills").iterdir()),
+                         ["declaude", "look-talks", "nossaifd", "presentations"])
         self.assertEqual([e["name"] for e in manifest["executables"]["required"]], ["uv"])
         self.assertIn("rahuldave/look-talks", manifest["npx"]["install"])
         self.assertIn("--skill look-talks", manifest["npx"]["install"])
@@ -95,11 +96,13 @@ class ProseFlowTest(unittest.TestCase):
             self.assertEqual(sorted(hooks), ["Stop", "UserPromptSubmit"], part)
 
     def test_the_installed_skills_are_whole_and_locked(self):
-        for name in ("nossaifd", "declaude"):
+        for name in ("nossaifd", "declaude", "presentations"):
             self.assertTrue((REPO / ".agents/skills" / name / "SKILL.md").is_file(), name)
         lock = json.loads((REPO / "skills-lock.json").read_text())
-        self.assertEqual(sorted(lock["skills"]), ["declaude", "nossaifd"])
-        self.assertEqual({v["source"] for v in lock["skills"].values()}, {"rahuldave/nossaifd"})
+        self.assertEqual({k: v["source"] for k, v in lock["skills"].items()},
+                         {"declaude": "rahuldave/nossaifd", "nossaifd": "rahuldave/nossaifd",
+                          "presentations": "rahuldave/nossaifd-talks"})
+        self.assertTrue((REPO / GateTest.TALK_CHECKER).is_file())
 
     def test_the_readme_credits_the_declaude_skill_once(self):
         text = " ".join((REPO / "README.md").read_text().split())
@@ -108,9 +111,13 @@ class ProseFlowTest(unittest.TestCase):
 
     def test_the_recipes_of_the_flow(self):
         justfile = (REPO / "Justfile").read_text()
-        for line in ("    git ls-files -z '*.md' ':!:.agents/skills/nossaifd/' ':!:.agents/skills/declaude/'"
-                     " | xargs -0 {{python}} -I {{check_py}}\n",
-                     "nossaifd-install:\n    npx -y skills add rahuldave/nossaifd -a codex --skill '*' -y\n",
+        for line in ("    git ls-files -z '*.md' '*.qmd' | {{python}} -I {{gate_py}} pages -z"
+                     " | xargs -0 -r {{python}} -I {{gate_py}} check\n",
+                     "    {{python}} -I {{check_py}} .agents/skills/look-talks/SKILL.md AGENTS.md\n",
+                     'gate_py := ".agents/skills/nossaifd/scripts/prose_gate.py"\n',
+                     "nossaifd-install:\n    npx -y skills add rahuldave/nossaifd -a codex --skill '*' -y\n"
+                     "    npx -y skills add rahuldave/nossaifd-talks -a codex --skill presentations -y\n",
+                     '[no-cd]\nprose-check +pages:\n    {{python}} -I "{{justfile_directory()}}/{{gate_py}}" check -v "$@"\n',
                      "prose-status:\n    {{python}} -I .agents/skills/nossaifd/scripts/prose_gate.py status\n",
                      '[no-cd]\nprose-record +pages:\n    {{python}} -I "{{justfile_directory()}}/.agents/skills/'
                      'nossaifd/scripts/prose_gate.py" record "$@"\n'):
@@ -119,26 +126,54 @@ class ProseFlowTest(unittest.TestCase):
         self.assertIn("    just prose\n", check)
 
     @unittest.skipUnless(shutil.which("just"), "needs just")
-    def test_just_prose_fails_on_a_hard_problem(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            shutil.copy(REPO / "Justfile", root / "Justfile")
-            shutil.copytree(REPO / ".agents/skills/nossaifd", root / ".agents/skills/nossaifd")
-            (root / "page.md").write_text("# A page\n\nIt's a page with a contraction.\n")
-            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-            subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-            run = subprocess.run(["just", "prose"], cwd=root, capture_output=True, text=True)
-            self.assertNotEqual(run.returncode, 0, run.stdout + run.stderr)
-            self.assertIn("page.md: 1 hard", run.stdout)
+    def prose_in_a_copy(self, pages):
+        "Run just prose in a git repository that holds the Justfile, the map, the skills and the pages."
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        shutil.copy(REPO / "Justfile", root / "Justfile")
+        shutil.copy(REPO / ".agents/nossaifd-checkers.json", root / ".agents-map.json")
+        for skill in ("nossaifd", "presentations", "look-talks"):
+            shutil.copytree(REPO / ".agents/skills" / skill, root / ".agents/skills" / skill)
+        (root / ".agents-map.json").rename(root / ".agents/nossaifd-checkers.json")
+        shutil.copy(REPO / "AGENTS.md", root / "AGENTS.md")
+        for name, text in pages.items():
+            (root / name).parent.mkdir(parents=True, exist_ok=True)
+            (root / name).write_text(text)
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        return subprocess.run(["just", "prose"], cwd=root, capture_output=True, text=True)
 
-    def test_just_prose_uses_the_checker_of_the_skill_and_skips_the_installed_skills(self):
+    @unittest.skipUnless(shutil.which("just"), "needs just")
+    def test_just_prose_fails_on_a_hard_problem(self):
+        run = self.prose_in_a_copy({"page.md": "# A page\n\nIt's a page with a contraction.\n"})
+        self.assertNotEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("page.md: checked by check.py of the skill, 1 hard", run.stdout)
+
+    @unittest.skipUnless(shutil.which("just"), "needs just")
+    def test_just_prose_gives_a_deck_to_the_talk_checker(self):
+        "The deck and its plan pass the talk checker, which allows the contractions of a script."
+        deck = (REPO / "examples/cache/slides.qmd").read_text()
+        self.assertRegex(deck, r"(?m)^That's ")
+        run = self.prose_in_a_copy({"talk/slides.qmd": deck, "talk/plan.md": (REPO / "examples/cache/plan.md").read_text()})
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("talk/slides.qmd: checked by .agents/skills/presentations/scripts/check_talk.py, 0 hard", run.stdout)
+        self.assertIn("talk/plan.md: checked by .agents/skills/presentations/scripts/check_talk.py, 0 hard", run.stdout)
+
+    def test_just_prose_checks_through_the_map_and_checks_our_skill(self):
         justfile = (REPO / "Justfile").read_text()
         self.assertIn('check_py := ".agents/skills/nossaifd/scripts/check.py"', justfile)
-        recipe = justfile[justfile.index("\nprose:"):justfile.index("\nnossaifd-install:")]
-        self.assertIn("':!:.agents/skills/nossaifd/'", recipe)
-        self.assertIn("':!:.agents/skills/declaude/'", recipe)
-        self.assertIn("{{check_py}}", recipe)
+        recipe = justfile[justfile.index("\nprose:"):justfile.index("\n# Check pages with the checker")]
+        self.assertIn("{{gate_py}} pages -z", recipe)
+        self.assertIn("{{gate_py}} check", recipe)
+        self.assertIn("{{check_py}} .agents/skills/look-talks/SKILL.md AGENTS.md", recipe)
 
+    @unittest.skipUnless(shutil.which("just"), "needs just")
+    def test_just_prose_checks_agents_md(self):
+        "The gate skips AGENTS.md, so the recipe names it, and a hard problem there fails just prose."
+        run = self.prose_in_a_copy({"AGENTS.md": "# Agents\n\nIt's a page with a contraction.\n"})
+        self.assertNotEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("AGENTS.md: 1 hard", run.stdout)
 
 class GuideTest(unittest.TestCase):
     def test_the_rules_run_from_1_to_34_in_order(self):
@@ -195,19 +230,53 @@ class StandaloneTest(unittest.TestCase):
 
 
 class GateTest(unittest.TestCase):
-    "The pages that the gate of nossaifd checks. These fail check.py on purpose: a script, a copy of a book or a test."
-    KNOWN = ["examples/cache/slides.qmd"]
+    "The pages that the gate of nossaifd checks, each through the map of checkers. No page fails."
+    TALK = ["examples/cache/plan.md", "examples/cache/slides.qmd"]
+    TALK_CHECKER = ".agents/skills/presentations/scripts/check_talk.py"
 
-    def test_only_the_known_pages_fail_the_gate(self):
+    def gate(self):
         sys.path.insert(0, str(REPO / ".agents/skills/nossaifd/scripts"))
         import prose_gate
         names = subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True).stdout.split()
         pages = [n for n in names if prose_gate.is_page(n)]
-        run = subprocess.run([sys.executable, "-I", str(REPO / ".agents/skills/nossaifd/scripts/check.py"), *pages],
+        run = subprocess.run([sys.executable, "-I", str(REPO / ".agents/skills/nossaifd/scripts/prose_gate.py"), "check", *pages],
                              cwd=REPO, capture_output=True, text=True)
-        failing = sorted(re.findall(r"(?m)^(\S+): [1-9]\d* hard", run.stdout))
-        self.assertEqual(failing, sorted(self.KNOWN))
+        found = {page: (checker, int(hard)) for page, checker, hard in
+                 re.findall(r"(?m)^(\S+): checked by (.+?), (\d+) hard", run.stdout)}
+        self.assertEqual(sorted(found), sorted(pages), run.stdout + run.stderr)
+        return found, run
 
+    def test_no_page_fails_the_gate(self):
+        found, run = self.gate()
+        self.assertEqual([page for page, (_, hard) in found.items() if hard], [])
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+    def test_the_gate_checks_the_deck_and_the_plan_with_the_talk_checker(self):
+        found, _ = self.gate()
+        for page in self.TALK:
+            self.assertEqual(found[page][0], self.TALK_CHECKER, page)
+        others = [page for page in found if page not in self.TALK]
+        self.assertTrue(others)
+        for page in others:
+            self.assertEqual(found[page][0], "check.py of the skill", page)
+
+    def test_the_outline_of_the_plan_is_the_sections_of_the_deck(self):
+        plan = (REPO / "examples/cache/plan.md").read_text(encoding="utf-8")
+        outline = re.findall(r"(?m)^### (.+)$", plan[plan.index("## The outline"):plan.index("## The questions")])
+        deck = (REPO / "examples/cache/slides.qmd").read_text(encoding="utf-8")
+        sections = list(dict.fromkeys(re.findall(r'data-section="([^"]+)"', deck)))
+        self.assertEqual(outline, sections)
+
+    def test_the_time_of_the_plan_fits_the_deck(self):
+        run = subprocess.run([sys.executable, "-I", str(REPO / self.TALK_CHECKER), "-v", "examples/cache/slides.qmd"],
+                             cwd=REPO, capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertNotRegex(run.stdout, r"slides for \d+ minutes")
+
+    def test_the_map_gives_the_decks_and_the_plans_to_the_talk_checker(self):
+        mapping = json.loads((REPO / ".agents/nossaifd-checkers.json").read_text(encoding="utf-8"))
+        self.assertEqual(mapping, {"version": 1, "checkers": [
+            {"pages": ["**/slides.qmd", "**/plan.md"], "checker": self.TALK_CHECKER}]})
 
 if __name__ == "__main__":
     unittest.main()

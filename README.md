@@ -73,15 +73,21 @@ This repository uses the flow of [nossaifd](https://github.com/rahuldave/nossaif
 its pages. The folder `.agents/skills/` holds two skills from nossaifd, so that the flow can run.
 One is the skill `nossaifd`, and the other is the skill `declaude`, by Oskar Austegard, under the MIT
 licence, from [his repository](https://github.com/oaustegard/claude-skills/tree/6baa7290da972191749acda03c63297e67b3fc26/declauding).
-Oskar Austegard calls it declauding. The package installs only `look-talks`, and not these two skills.
+Oskar Austegard calls it declauding. The folder also holds the skill `presentations` from
+[nossaifd-talks](https://github.com/rahuldave/nossaifd-talks), for the talk checker `check_talk.py` in that
+skill. The package installs only `look-talks`, and not these three skills.
 
 - `AGENTS.md` and `CLAUDE.md` tell an agent to use the nossaifd skill for each page.
 - The hooks in `.claude/settings.json` and `.codex/hooks.json` stop a turn once when a changed page has a
   hard problem or no record of its passes.
 - The workflow `nossaifd-prose.yml` checks each page that a pull request changes.
+- The map `.agents/nossaifd-checkers.json` names the talk checker `check_talk.py`, in place of `check.py`,
+  for each deck and each plan. The script of a talk uses contractions, as rule 34 of the talk guide says,
+  and `check.py` marks each contraction as a hard problem.
 
 After the passes, `just prose-record page.md` records a page, and `just prose-status` lists the pages that
-still need them. `just nossaifd-install` installs the two skills again from nossaifd.
+still need them. `just prose-check page.md` checks a page with the checker that the map names for it.
+`just nossaifd-install` installs the three skills again.
 
 ## Licence
 

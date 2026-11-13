@@ -11,7 +11,13 @@
       "source": "rahuldave/nossaifd",
       "sourceType": "github",
       "skillPath": ".agents/skills/nossaifd/SKILL.md",
-      "computedHash": "4fa8c0a444c99dfb308e9cbeeef607bbb0b3df92dfd60d4ad8423d96e2c3ffb5"
+      "computedHash": "04c905f02a7c3f607422e04d0fe9ec0ea796c4fd83f7b4df85b15e03387cc432"
+    },
+    "presentations": {
+      "source": "rahuldave/nossaifd-talks",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/presentations/SKILL.md",
+      "computedHash": "b33fbdc2b636e93c01d03e5013c987ba27d444facebc9fea3cf9083d48cfbc3e"
     }
   }
 }

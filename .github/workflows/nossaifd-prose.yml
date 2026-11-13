@@ -1,6 +1,8 @@
-# Check each page that a pull request adds or changes with the checker of the nossaifd skill. It fails on a hard
-# problem. It does not run the pass of the declaude skill, by Oskar Austegard, which needs a model. The hooks of
-# the agent ask for that pass. The skill must be committed in .agents/skills/nossaifd for this workflow to run.
+# Check each page that a pull request adds or changes with the checker of the nossaifd skill, or with the checker
+# that the map .agents/nossaifd-checkers.json of the project names for the page. It fails on a hard problem.
+# Keep the event pull_request: the map names a program to run, and pull_request_target would give it the
+# secrets. It does not run the pass of the declaude skill, by Oskar Austegard, which needs a model. The hooks
+# of the agent ask for that pass. The skill must be committed in .agents/skills/nossaifd for this workflow to run.
 name: prose
 
 on:

@@ -1,6 +1,6 @@
 """Check Markdown prose against the measurable rules in GUIDE.md.
 
-    uv run --no-project python check.py page.md [page.md ...]   report each page; exit 1 if a hard rule is broken
+    uv run --no-project python check.py page.md [page.md ...]   report each page; exit 1 if a hard rule is broken, 2 if a page cannot be read
     uv run --no-project python check.py -v page.md              also show the soft notes, for a person to judge
 
 The checks read prose only: paragraphs, list items and headings. Front matter, code blocks, inline code,
@@ -200,11 +200,17 @@ def check(path: Path) -> tuple[list[str], list[str]]:  # Hard problems, soft not
 
 
 def main() -> None:
-    "Check every page named on the command line."
+    "Check every page named on the command line. Exit 2 when a page cannot be read, else 1 on a hard problem."
     verbose = "-v" in sys.argv
-    failed = False
+    failed = unread = False
     for name in (a for a in sys.argv[1:] if a != "-v"):
-        hard, soft = check(Path(name))
+        try:
+            hard, soft = check(Path(name))
+        except (OSError, UnicodeDecodeError) as error:
+            print(f"{name}: cannot be read: {error.strerror if isinstance(error, OSError) else error}",
+                  file=sys.stderr)
+            unread = True
+            continue
         print(f"{name}: {len(hard)} hard, {len(soft)} soft")
         for problem in hard:
             print("  HARD " + problem)
@@ -212,7 +218,7 @@ def main() -> None:
             for note in soft:
                 print("  soft " + note)
         failed = failed or bool(hard)
-    sys.exit(1 if failed else 0)
+    sys.exit(2 if unread else 1 if failed else 0)
 
 
 if __name__ == "__main__":

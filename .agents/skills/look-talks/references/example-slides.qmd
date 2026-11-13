@@ -33,7 +33,7 @@ Cue: the first section
 First, the wait.
 :::
 
-## Students wait eight seconds at nine {data-section="Students wait eight seconds at nine"}
+## Each search page takes eight seconds {data-section="Students wait eight seconds at nine"}
 
 ::: {.incremental data-fragment-effect="dim"}
 - 3,000 searches in ten minutes
