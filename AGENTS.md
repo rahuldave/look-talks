@@ -11,3 +11,6 @@ uv run --no-project --quiet python .agents/skills/nossaifd/scripts/prose_gate.py
 A hook checks, when you end your turn, that each page that the turn changed passed the checker and has a
 record. If a page is not prose for a person, do not record it, and tell the user so. Keep each bad
 example that a page shows on purpose.
+
+In a project with the commit gates, run `just prose` in place of steps 6 to 8. A fresh agent does the
+steps and records each page. A commit needs the `prose` record of `just prose`.

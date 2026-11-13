@@ -1,0 +1,3 @@
+interface:
+  display_name: "presentations"
+  short_description: "Plan a talk, write its script and check its slides, from the tutorial of Rosalind Reid and the book of Scott L. Montgomery"

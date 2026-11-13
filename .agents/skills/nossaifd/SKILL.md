@@ -43,13 +43,18 @@ guide says.
    not, define each technical term the first time that it appears on a page.
 3. Write the page. Do not read the register of the declaude skill before you
    write it.
-4. Run the checker on the page, and fix each hard problem:
+4. Run the checker of the page, and fix each hard problem:
 
    ```bash
-   uv run --no-project python .agents/skills/nossaifd/scripts/check.py page.md
+   uv run --no-project --quiet python .agents/skills/nossaifd/scripts/prose_gate.py check page.md
    ```
 
-5. Run the checker with `-v` to see the soft notes. Fix each note that makes
+   The checker is `scripts/check.py`. A project can name another checker
+   for some pages in its map of checkers, `.agents/nossaifd-checkers.json`.
+   An example is the talk checker for the slides of a talk. Then this
+   command runs that checker, and so does the hook. The output names the
+   checker of each page.
+5. Run the command with `-v` to see the soft notes. Fix each note that makes
    the page harder to read.
 6. Keep a copy of the page. Then give the page to a subagent that did not
    write it, because a writer misses its own habits. Tell the subagent these
@@ -83,6 +88,12 @@ guide says.
    page that your turn changed, at the end of the turn. The page must pass
    the checker and have a record. It asks once for the steps that remain. If a page is not
    prose for a person, do not record it, and tell the user so.
+
+   A project with the commit gates of agent_gest_git_skills turns on the tasker role in
+   `.agents/stack.json`. In such a project, run `just prose` in place of steps 6 to 8. It gives the
+   pages to a fresh agent, which is an agent that the harness starts for one task. The fresh agent does
+   those steps and records each page. A commit needs the `prose` record of `just prose`, and the steps
+   by hand do not give it.
 9. Read the page yourself. The checker cannot judge meaning, tone or a missing
    definition.
 
@@ -99,7 +110,13 @@ It needs only Python 3.11 or later, which `uv run` gives.
   measure. It exits with 1 when it finds a hard problem.
 - **`scripts/prose_gate.py`** records a page after its pass. It is also the
   hook at the start and at the end of a turn of Claude Code or Codex. It
-  also checks a pull request.
+  also checks a pull request. `prose_gate.py pages` prints the paths that
+  are pages, by the one rule that the hook and the commit gates use.
+  `prose_gate.py check` checks a page with the checker that the map of
+  checkers of the project names for it, or with `check.py`.
+- **`references/targets/prose.md`** is the base task of the target
+  `just prose` of the commit gates. It gives the fresh agent the
+  plain-writing pass and the pass of the declaude skill by Oskar Austegard.
 - **`assets/agents-prose.md`** is the instruction for the `AGENTS.md` and
   `CLAUDE.md` of a project.
 - **`assets/claude-settings-hook.json`** and **`assets/codex-hooks.json`**
